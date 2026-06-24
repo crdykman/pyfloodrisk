@@ -1,0 +1,479 @@
+#,"Australian Bureau of Meteorology"
+#,"Hydrologic Reference Stations"
+#
+#,"Dataset version: August, 2024"
+#
+#,"For description of data owner codes see http://www.bom.gov.au/water/hrs/content/data_owners.csv"
+#
+#,"For more information see http://www.bom.gov.au/water/hrs"
+#
+#,"For copyright and licence information see http://www.bom.gov.au/water/hrs/copyright.shtml"
+#
+AWRC Station Number,Station Name,Latitude,Longitude,Jurisdiction,Catchment Area (km2),Data Owner Name,Data Owner Code
+410713,Paddy's River at Riverlea,-35.3843,148.9656,ACT,224.4,Icon Water Limited,w00002
+410730,Cotter River at Gingera,-35.5917,148.82125,ACT,130.0,Icon Water Limited,w00002
+410731,Gudgenby River at Tennent,-35.574851,149.06625,ACT,671.6,"Environment, Planning and Sustainable Development Directorate",w00075
+410734,Queanbeyan River at Tinderry,-35.61375,149.3498186,ACT,563.7,Icon Water Limited,w00002
+410705,Molonglo River at Burbong,-35.3367,149.31625,ACTNSW,508.6,"Environment, Planning and Sustainable Development Directorate",w00075
+410761,Murrumbidgee River below Lobbs Hole Creek,-35.539928,149.10125,ACTNSW,5158,"Environment, Planning and Sustainable Development Directorate",w00075
+201001,Oxley River at Eungella,-28.3553,153.292,NSW,214.1,Water NSW,w00231
+203005,Richmond River at Wiangaree,-28.5065,152.9658,NSW,712.2,Water NSW,w00231
+203010,Leycester River at Rock Valley,-28.7381,153.163,NSW,177.7,Water NSW,w00231
+203030,Myrtle Creek at Rappville,-29.1116,152.9984,NSW,392.2,Water NSW,w00231
+204002,Clarence River at Tabulam,-28.89,152.56,NSW,4538,Water NSW,w00231
+204007,Clarence River at Lilydale (Newbold Crossing),-29.51,152.68,NSW,16953,Water NSW,w00231
+204014,Mann River at Mitchell,-29.6947,152.1049,NSW,888.6,Water NSW,w00231
+204017,Bielsdown Creek at Dorrigo No.2 and No.3,-30.3073,152.7135,NSW,76.0,Water NSW,w00231
+204025,Orara River at Karangi,-30.2544,153.0323,NSW,135.8,Water NSW,w00231
+204030,Aberfoyle River at Aberfoyle,-30.2603,152.0083,NSW,208.6,Water NSW,w00231
+204036,Cataract Creek at Sandy Hill (below Snake Creek),-28.9341,152.2171,NSW,236.5,Water NSW,w00231
+204037,Clouds Creek at Clouds Creek,-30.0938,152.6282,NSW,63.3,Water NSW,w00231
+204039,Maryland River d/s Wylie Creek,-28.468,152.1978,NSW,376.7,Water NSW,w00231
+204041,Orara River at Bawden Bridge,-29.7242,152.8092,NSW,1807,Water NSW,w00231
+204046,Timbarra River at Drake,-29.0573,152.3849,NSW,1723,Water NSW,w00231
+204051,Clarence River at Paddys Flat,-28.7211,152.4174,NSW,3111,Water NSW,w00231
+204056,Dandahra Creek at Gibraltar Range,-29.4864,152.4456,NSW,109.7,Water NSW,w00231
+204906,Orara River at Glenreagh,-30.07,152.98,NSW,430.6,Water NSW,w00231
+206009,Tia River at Tia,-31.1878,151.8291,NSW,265.2,Water NSW,w00231
+206014,Wollomombi River at Coninside,-30.47635697,152.028857,NSW,377.4,Water NSW,w00231
+206018,Apsley River at Apsley Falls,-31.05125,151.76625,NSW,851.9,Water NSW,w00231
+206025,Salisbury Waters near Dangar Falls,-30.681,151.7133,NSW,647.6,Water NSW,w00231
+207004,Hastings River at Ellenborough (Kindee Bridge),-31.4241,152.4697,NSW,1583,Water NSW,w00231
+207013,Ellenborough River d/s Bunnoo River Junction,-31.481,152.4478,NSW,497.8,Water NSW,w00231
+207014,Wilson River at Avenel,-31.3326,152.7404,NSW,508.0,Water NSW,w00231
+207015,Hastings River at Mount Seaview,-31.3714,152.2442,NSW,351.7,Water NSW,w00231
+208003,Gloucester River at Doon Ayre,-31.8981,152.0956,NSW,1631,Water NSW,w00231
+208004,Manning River at Killawarra,-31.92,152.31,NSW,6642,Water NSW,w00231
+208005,Nowendoc River at Rocks Crossing,-31.779,152.0746,NSW,1894,Water NSW,w00231
+208007,Nowendoc River at Nowendoc,-31.51625,151.71625,NSW,221.1,Water NSW,w00231
+208009,Barnard River at Barry,-31.57995,151.31495,NSW,152.1,Water NSW,w00231
+208011,Barnard River at Mackay,-31.77,151.9,NSW,1821,Water NSW,w00231
+208015,Lansdowne River at Lansdowne,-31.7889,152.5128,NSW,98.1,Water NSW,w00231
+208024,Barnard River d/s Back River Junction,-31.56,151.34,NSW,282.3,Water NSW,w00231
+208026,Myall River at Jacky Barkers,-31.6417,151.7342,NSW,546.4,Water NSW,w00231
+209002,Mammy Johnsons River at Pikes Crossing,-32.2453,151.9778,NSW,158.1,Water NSW,w00231
+209003,Karuah River at Booral,-32.48,151.96,NSW,974.3,Water NSW,w00231
+210011,Williams River at Tillegra,-32.31945,151.68805,NSW,196.4,Water NSW,w00231
+210014,Rouchel Brook at Rouchel Brook (The Vale),-32.1531,151.0474,NSW,399.7,Water NSW,w00231
+210016,Goulburn River at Kerrabee,-32.42,150.32,NSW,4982,Water NSW,w00231
+210017,Moonan Brook at Moonan Brook,-31.9437,151.2797,NSW,105.0,Water NSW,w00231
+210022,Allyn River at Halton,-32.3078,151.5117,NSW,188.5,Water NSW,w00231
+210031,Goulburn River at Sandy Hollow,-32.35,150.57,NSW,6818,Water NSW,w00231
+210040,Wybong Creek at Wybong,-32.2708,150.6349,NSW,670.8,Water NSW,w00231
+210052,Pages River at Gundy Recorder,-32.0119,150.9965,NSW,1069,Water NSW,w00231
+211009,Wyong River at Gracemere,-33.2724,151.3593,NSW,237.6,Water NSW,w00231
+211013,Ourimbah Creek u/s Weir,-33.3497,151.3428,NSW,82.3,Water NSW,w00231
+211014,Wyong River at Yarramalong,-33.2198,151.2734,NSW,180.4,Water NSW,w00231
+212040,Kialla Creek at Pomeroy,-34.6089,149.5431,NSW,92.7,Water NSW,w00231
+212209,Nepean River at Maguires Crossing,-34.476507,150.53375,NSW,67.4,Water NSW,w00231
+212260,Kowmung River at Cedar Ford,-33.94734,150.24375,NSW,713.0,Water NSW,w00231
+215004,Corang River at Hockeys,-35.1471,150.0329,NSW,165.6,Water NSW,w00231
+215207,Shoalhaven River at Fossickers Flat,-34.8217,150.1833,NSW,4660,Water NSW,w00231
+216002,Clyde River at Brooman,-35.4681,150.23625,NSW,859.0,Water NSW,w00231
+216009,Buckenbowra River at Buckenbowra No.3,-35.714,150.0342,NSW,165.5,Water NSW,w00231
+218001,Tuross River at Tuross Vale,-36.26465,149.51035,NSW,90.6,Water NSW,w00231
+218005,Tuross River downstream Wadbilliga River Junction,-36.1975,149.7606,NSW,918.0,Water NSW,w00231
+218007,Wadbilliga River at Wadbilliga,-36.2586,149.6914,NSW,120.2,Water NSW,w00231
+218008,Tuross River at Eurobodalla,-36.13,150.0,NSW,1607,Water NSW,w00231
+219001,Rutherford Creek at Brown Mountain,-36.59315,149.44185,NSW,14.4,Water NSW,w00231
+219003,Bemboka River at Morans Crossing,-36.6674,149.6469,NSW,313.7,Water NSW,w00231
+219006,Tantawangalo Creek at Tantawangalo Mountain (Dam),-36.78,149.54,NSW,83.1,Water NSW,w00231
+219017,Double Creek near Brogo,-36.6,149.8094,NSW,151.9,Water NSW,w00231
+219022,Tantawangalo Creek at Candelo Dam Site,-36.7319,149.6842,NSW,200.1,Water NSW,w00231
+220003,Pambula River at Lochiel,-36.9414,149.8194,NSW,105.6,Water NSW,w00231
+221002,Wallagaraugh River at Princes Highway,-37.3719,149.7125,NSW,477.2,Water NSW,w00231
+222004,Little Plains River at Wellesley (Rowes),-36.9969,149.0925,NSW,610.5,Water NSW,w00231
+222016,Pinch River at the Barry Way,-36.7936,148.4033,NSW,156.4,Water NSW,w00231
+401009,Maragle Creek at Maragle,-35.9266,148.1009,NSW,217.3,Water NSW,w00231
+401012,Murray River at Biggara,-36.31875,148.0519476,NSW,1257,Water NSW,w00231
+401013,Jingellic Creek at Jingellic,-35.8972,147.6917,NSW,395.0,Water NSW,w00231
+401015,Bowna Creek at Yambla,-35.91625,146.975091,NSW,290.1,Water NSW,w00231
+401016,Welumba Creek at the Square,-36.04,148.12,NSW,50.7,Water NSW,w00231
+401017,Mannus Creek at Yarramundi,-35.77,147.93,NSW,194.3,Water NSW,w00231
+410024,Goodradigbee River at Wee Jasper (Kashmir),-35.1672,148.6855,NSW,990.0,Water NSW,w00231
+410026,Yass River at Yass,-34.8367,148.9103,NSW,1229,Water NSW,w00231
+410033,Murrumbidgee River at Mittagang Crossing,-36.17,149.09,NSW,1890,Water NSW,w00231
+410038,Adjungbilly Creek at Darbalara,-35.0192,148.2457,NSW,390.9,Water NSW,w00231
+410044,Muttama Creek at Coolac,-34.9319,148.1616,NSW,1072,Water NSW,w00231
+410047,Tarcutta Creek at Old Borambola,-35.1639,147.6543,NSW,1653,Water NSW,w00231
+410057,Goobarragandra River at Lacmalac,-35.32905,148.34845,NSW,667.9,Water NSW,w00231
+410061,Adelong Creek at Batlow Road,-35.33165,148.06915,NSW,146.1,Water NSW,w00231
+410062,Numeralla River at Numeralla School,-36.1793,149.3485,NSW,669.8,Water NSW,w00231
+410088,Goodradigbee River at Brindabella (No.2 and No.3-Cabbans),-35.42,148.73,NSW,432.1,Water NSW,w00231
+410091,Billabong Creek at Walbundrie,-35.69,146.72,NSW,2808,Water NSW,w00231
+410141,Micaligo Creek at Michelago,-35.7053,149.1488,NSW,189.8,Water NSW,w00231
+410156,Kyeamba Creek at Book Book,-35.35,147.55,NSW,145.4,Water NSW,w00231
+411003,Butmaroo Creek at Butmaroo,-35.2567,149.5422,NSW,61.1,Water NSW,w00231
+412028,Abercrombie River at Abercrombie,-33.9548,149.3252,NSW,2631,Water NSW,w00231
+412029,Boorowa River at Prossers Crossing,-34.1441,148.8101,NSW,1552,Water NSW,w00231
+412050,Crookwell River at Narrawa North,-34.31125,149.167269,NSW,761.9,Water NSW,w00231
+412066,Abercrombie River at Hadley No.2,-34.1128,149.5978,NSW,1630,Water NSW,w00231
+416003,Tenterfield Creek at Clifton,-29.02915,151.72665,NSW,552.6,Water NSW,w00231
+416010,Macintyre River at Wallangra,-29.2642,150.8984,NSW,2134,Water NSW,w00231
+416016,Macintyre River at Inverell (Middle Creek),-29.7936,151.1263,NSW,751.2,Water NSW,w00231
+416020,Ottleys Creek at Coolatai,-29.234,150.7581,NSW,383.9,Water NSW,w00231
+416023,Deepwater River at Bolivia,-29.2929,151.9234,NSW,538.5,Water NSW,w00231
+416032,Mole River at Donaldson,-29.017,151.5986,NSW,1592,Water NSW,w00231
+418005,Copes Creek at Kimberley,-29.9168215,151.1143215,NSW,249.3,Water NSW,w00231
+418014,Gwydir River at Yarrowyck,-30.4674403,151.3624403,NSW,834.6,Water NSW,w00231
+418015,Horton River at Rider (Killara),-29.83,150.35,NSW,1955,Water NSW,w00231
+418017,Myall Creek at Molroy,-29.7992,150.5832,NSW,865.2,Water NSW,w00231
+418021,Laura Creek at Laura,-30.2293,151.1857,NSW,346.0,Water NSW,w00231
+418025,Halls Creek at Bingara,-29.9361,150.5716,NSW,126.4,Water NSW,w00231
+418027,Horton River at Horton Dam Site,-30.2081,150.4281,NSW,204.9,Water NSW,w00231
+418032,Tycannah Creek at Horseshoe Lagoon,-29.6719,150.0426,NSW,872.6,Water NSW,w00231
+419005,Namoi River at North Cuerindi,-30.6784993,150.7784993,NSW,2532,Water NSW,w00231
+419010,Macdonald River at Woolbrook,-30.9669,151.3448,NSW,840.8,Water NSW,w00231
+419016,Cockburn River at Mulla Crossing,-31.0614,151.1254,NSW,896.6,Water NSW,w00231
+419029,Halls Creek at Ukolan,-30.7054,150.8259,NSW,362.8,Water NSW,w00231
+419035,Goonoo Goonoo Creek at Timbumburi,-31.2726,150.9147,NSW,456.0,Water NSW,w00231
+419054,Swamp Oak Creek at Limbri,-31.0396,151.1694,NSW,399.9,Water NSW,w00231
+420003,Belar Creek at Warkton (Blackburns),-31.3861,149.2011,NSW,130.2,Water NSW,w00231
+420017,Castlereagh River at Hidden Valley,-31.4197,149.3103,NSW,1154,Water NSW,w00231
+421018,Bell River at Neurea,-32.6808,148.9478,NSW,1628,Water NSW,w00231
+421026,Turon River at Sofala,-33.0819,149.689,NSW,884.0,Water NSW,w00231
+421042,Talbragar River at Elong Elong,-32.0939,149.0598,NSW,3187,Water NSW,w00231
+421048,Little River at Obley No.2,-32.7072,148.5511,NSW,576.2,Water NSW,w00231
+421050,Bell River at Molong,-33.03,148.95,NSW,371.1,Water NSW,w00231
+421055,Coolbaggie Creek at Rawsonville,-32.1442,148.4549,NSW,674.0,Water NSW,w00231
+424002,Paroo River at Willara Crossing,-29.23875,144.455339,NSW,35239,Water NSW,w00231
+G0050115,Hugh River - South Road Crossing,-24.35332906,133.4333291,NT,3324,"Department of Environment, Parks and Water Security",w00067
+G8110004,East Baines River - u/s Victoria Hwy,-15.76625,130.03375,NT,2443,"Department of Environment, Parks and Water Security",w00067
+G8140001,Katherine River - Railway Bridge,-14.4633,132.2567,NT,8357,"Department of Environment, Parks and Water Security",w00067
+G8140008,Fergusson River - Railway Bridge,-14.0712,131.9762,NT,1679,"Department of Environment, Parks and Water Security",w00067
+G8140011,Dry River - Manbulloo Boundary,-15.0841,132.4109,NT,4786,"Department of Environment, Parks and Water Security",w00067
+G8140040,Daly River - Mount Nancar,-13.83085,130.73585,NT,47652,"Department of Environment, Parks and Water Security",w00067
+G8140063,Douglas River - d/s Old Douglas Homestead,-13.798,131.3396,NT,831.1,"Department of Environment, Parks and Water Security",w00067
+G8140067,Daly River - u/s Dorisvale Crossing,-14.3633,131.5737,NT,33227,"Department of Environment, Parks and Water Security",w00067
+G8150010,Finniss River - Batchelor Dam Site,-13.025,130.9512,NT,362.9,"Department of Environment, Parks and Water Security",w00067
+G8150018,Elizabeth River - Stuart Hwy,-12.60605,131.07355,NT,95.6,"Department of Environment, Parks and Water Security",w00067
+G8150098,Blackmore River - Tumbling Waters,-12.7813,130.9413,NT,165.5,"Department of Environment, Parks and Water Security",w00067
+G8150180,Finniss River - Gitchams Crossing,-12.9696,130.7621,NT,1041,"Department of Environment, Parks and Water Security",w00067
+G8170002,Adelaide River - Railway Bridge,-13.24125,131.1083,NT,638.4,"Department of Environment, Parks and Water Security",w00067
+G8190001,West Alligator River - u/s Arnhem Hwy,-12.7911,132.1739,NT,245.8,"Department of Environment, Parks and Water Security",w00067
+G8200045,South Alligator River - El Sherana,-13.52455,132.51955,NT,1231,"Department of Environment, Parks and Water Security",w00067
+G9030001,Elsey Creek - Warlock Ponds,-15.0854,133.1229,NT,6784,"Department of Environment, Parks and Water Security",w00067
+G9070142,McArthur River - Baileys Grave,-16.778,135.75625,NT,4261,"Department of Environment, Parks and Water Security",w00067
+003303A,Barcoo River at Blackall,-24.43,145.46,QLD,5792,"Department of Regional Development, Manufacturing and Water",w00066
+105101A,Normanby River at Battle Camp,-15.2812,144.8387,QLD,2306,"Department of Regional Development, Manufacturing and Water",w00066
+105105A,East Normanby River at Mulligan Highway,-15.771166,145.01375,QLD,296.8,"Department of Regional Development, Manufacturing and Water",w00066
+108002A,Daintree River at Bairds,-16.17875,145.281861,QLD,907.3,"Department of Regional Development, Manufacturing and Water",w00066
+111005A,Mulgrave River at the Fisheries,-17.1832,145.7248,QLD,358.2,"Department of Regional Development, Manufacturing and Water",w00066
+111007A,Mulgrave River at Peets Bridge,-17.13,145.76,QLD,522.8,"Department of Regional Development, Manufacturing and Water",w00066
+112002A,Fisher Creek at Nerada,-17.564487,145.908013,QLD,16.2,"Department of Regional Development, Manufacturing and Water",w00066
+112101B,South Johnstone River upstream of Central Mill,-17.6089,145.9791,QLD,397.7,"Department of Regional Development, Manufacturing and Water",w00066
+112102A,Liverpool Creek at Upper Japoonvale,-17.71520831,145.9052083,QLD,77.8,"Department of Regional Development, Manufacturing and Water",w00066
+113004A,Cochable Creek at Powerline,-17.73961111,145.62875,QLD,95.5,"Department of Regional Development, Manufacturing and Water",w00066
+114001A,Murray River at Upper Murray,-18.1069,145.8054,QLD,155.8,"Department of Regional Development, Manufacturing and Water",w00066
+116006B,Herbert River at Abergowrie,-18.49125,145.922213,QLD,7487,"Department of Regional Development, Manufacturing and Water",w00066
+116010A,Blencoe Creek at Blencoe Falls,-18.2044,145.5369,QLD,223.7,"Department of Regional Development, Manufacturing and Water",w00066
+116011A,Millstream at Ravenshoe,-17.60505,145.47745,QLD,90.1,"Department of Regional Development, Manufacturing and Water",w00066
+116013A,Millstream at Archer Creek,-17.65125,145.3410684,QLD,309.3,"Department of Regional Development, Manufacturing and Water",w00066
+116014A,Wild River at Silver Valley,-17.6266,145.29875,QLD,587.6,"Department of Regional Development, Manufacturing and Water",w00066
+116015A,Blunder Creek at Wooroora,-17.73625,145.437374,QLD,127.4,"Department of Regional Development, Manufacturing and Water",w00066
+117002A,Black River at Bruce Highway,-19.2377,146.6329,QLD,255.2,"Department of Regional Development, Manufacturing and Water",w00066
+117003A,Bluewater Creek at Bluewater,-19.185,146.5461,QLD,89.9,"Department of Regional Development, Manufacturing and Water",w00066
+118106A,Alligator Creek at Allendale,-19.39,146.96,QLD,68.5,"Department of Regional Development, Manufacturing and Water",w00066
+119003A,Haughton River at Powerline,-19.63,147.11,QLD,1807,"Department of Regional Development, Manufacturing and Water",w00066
+120102A,Keelbottom Creek at Keelbottom,-19.3719,146.3589,QLD,194.2,"Department of Regional Development, Manufacturing and Water",w00066
+120301B,Belyando River at Gregory Development Rd.,-21.53,146.86,QLD,35326,"Department of Regional Development, Manufacturing and Water",w00066
+120304A,Suttor River at Eaglefield,-21.45,147.71,QLD,1917,"Department of Regional Development, Manufacturing and Water",w00066
+121002A,Elliot River at Guthalungra,-19.94,147.84,QLD,279.6,"Department of Regional Development, Manufacturing and Water",w00066
+121003A,Don River at Reeves,-20.15,148.15,QLD,1016,"Department of Regional Development, Manufacturing and Water",w00066
+122004A,Gregory River at Lower Gregory,-20.300381,148.547119,QLD,45.6,"Department of Regional Development, Manufacturing and Water",w00066
+124002A,St.Helens Creek at Calen,-20.9075,148.7586,QLD,120.5,"Department of Regional Development, Manufacturing and Water",w00066
+125005A,Blacks Creek at Whitefords,-21.3228,148.8351,QLD,506.8,"Department of Regional Development, Manufacturing and Water",w00066
+126003A,Carmila Creek at Carmila,-21.915676,149.39875,QLD,86.3,"Department of Regional Development, Manufacturing and Water",w00066
+129001A,Waterpark Creek at Byfield,-22.835,150.6653,QLD,241.3,"Department of Regional Development, Manufacturing and Water",w00066
+130004A,Raglan Creek at Old Station,-23.8191,150.8206,QLD,391.6,"Department of Regional Development, Manufacturing and Water",w00066
+130302A,Dawson River at Taroom,-25.64,149.79,QLD,15851,"Department of Regional Development, Manufacturing and Water",w00066
+130324A,Dawson River at Utopia Downs,-25.7447,149.3299,QLD,6026,"Department of Regional Development, Manufacturing and Water",w00066
+130403A,Connors River at Mount Bridget,-22.0383,149.1286,QLD,1281,"Department of Regional Development, Manufacturing and Water",w00066
+130410A,Isaac River at Deverill,-22.1742,148.3811,QLD,4139,"Department of Regional Development, Manufacturing and Water",w00066
+130413A,Denison Creek at Braeside,-21.7696,148.7869,QLD,759.8,"Department of Regional Development, Manufacturing and Water",w00066
+132001A,Calliope River at Castlehope,-23.99,151.1,QLD,1288,"Department of Regional Development, Manufacturing and Water",w00066
+135002A,Kolan River at Springfield,-24.7533,151.5872,QLD,550.3,"Department of Regional Development, Manufacturing and Water",w00066
+135004A,Gin Gin Creek at Brushy Creek,-24.97,151.89,QLD,543.4,"Department of Regional Development, Manufacturing and Water",w00066
+136006A,Reid Creek at Mungy,-25.2731,151.5173,QLD,218.3,"Department of Regional Development, Manufacturing and Water",w00066
+136202D,Barambah Creek at Litzows,-26.301221,152.043779,QLD,646.6,"Department of Regional Development, Manufacturing and Water",w00066
+136203A,Barker Creek at Brooklands,-26.73635469,151.8136453,QLD,312.9,"Department of Regional Development, Manufacturing and Water",w00066
+136208A,Boonara Creek at Ettiewyn,-25.902786,151.84375,QLD,1399,"Department of Regional Development, Manufacturing and Water",w00066
+136304A,Stuart River at Proston Rifle Range,-26.1816,151.5461,QLD,1545,"Department of Regional Development, Manufacturing and Water",w00066
+137101A,Gregory River at Isis Highway,-25.0866455,152.2408545,QLD,453.2,"Department of Regional Development, Manufacturing and Water",w00066
+137201A,Isis River at Bruce Highway,-25.2662455,152.3687455,QLD,449.3,"Department of Regional Development, Manufacturing and Water",w00066
+138009A,Tinana Creek at Tagigan Road,-26.07875,152.7838197,QLD,101.8,"Department of Regional Development, Manufacturing and Water",w00066
+138110A,Mary River at Bellbird Creek,-26.63,152.7,QLD,486.0,"Department of Regional Development, Manufacturing and Water",w00066
+138903A,Tinana Creek at Bauple East,-25.82,152.72,QLD,784.3,"Department of Regional Development, Manufacturing and Water",w00066
+140002A,Teewah Creek at Coops Corner,-26.0572,153.0426,QLD,57.8,"Department of Regional Development, Manufacturing and Water",w00066
+141008A,Eudlo Creek at Kiels Mountain,-26.66,153.02,QLD,55.5,"Department of Regional Development, Manufacturing and Water",w00066
+143007A,Brisbane River at Linville,-26.8061,152.2711,QLD,1999,"Department of Regional Development, Manufacturing and Water",w00066
+143009A,Brisbane River at Gregors Creek,-26.99638563,152.40875,QLD,3876,"Department of Regional Development, Manufacturing and Water",w00066
+143107A,Bremer River at Walloon,-27.6,152.69,QLD,628.1,"Department of Regional Development, Manufacturing and Water",w00066
+143110A,Bremer River at Adams Bridge,-27.82773252,152.51125,QLD,126.5,"Department of Regional Development, Manufacturing and Water",w00066
+143209B,Laidley Creek at Mulgowie,-27.7314,152.3633,QLD,167.3,"Department of Regional Development, Manufacturing and Water",w00066
+143303A,Stanley River at Peachester,-26.83875,152.8403,QLD,101.7,"Department of Regional Development, Manufacturing and Water",w00066
+145010A,Running Creek at Dieckmans Bridge,-28.24625,152.89125,QLD,129.0,"Department of Regional Development, Manufacturing and Water",w00066
+145011A,Teviot Brook at Croftby,-28.147989,152.57125,QLD,85.1,"Department of Regional Development, Manufacturing and Water",w00066
+145018A,Burnett Creek upstream of Maroon Dam,-28.219112,152.608388,QLD,82.4,"Department of Regional Development, Manufacturing and Water",w00066
+145101D,Albert River at Lumeah Number 2,-28.05297,153.04547,QLD,165.9,"Department of Regional Development, Manufacturing and Water",w00066
+145102B,Albert River at Bromfleet,-27.91,153.11,QLD,544.6,"Department of Regional Development, Manufacturing and Water",w00066
+145107A,Canungra Creek at Main Road Bridge,-27.99625,153.15875,QLD,102.3,"Department of Regional Development, Manufacturing and Water",w00066
+146010A,Coomera River at Army Camp,-28.0256055,153.1931055,QLD,96.6,"Department of Regional Development, Manufacturing and Water",w00066
+146012A,Currumbin Creek at Nicolls Bridge,-28.17875,153.423012,QLD,29.0,"Department of Regional Development, Manufacturing and Water",w00066
+146095A,Tallebudgera Creek at Tallebudgera Creek Road,-28.149219,153.40375,QLD,55.8,"Department of Regional Development, Manufacturing and Water",w00066
+422202B,Dogwood Creek at Gilweir,-26.70904167,150.1790417,QLD,2882,"Department of Regional Development, Manufacturing and Water",w00066
+422306A,Swan Creek at Swanfels,-28.1643325,152.2831675,QLD,82.6,"Department of Regional Development, Manufacturing and Water",w00066
+422319B,Dalrymple Creek at Allora,-28.03625,152.014256,QLD,255.5,"Department of Regional Development, Manufacturing and Water",w00066
+422321B,Spring Creek at Killarney,-28.35375,152.333067,QLD,31.6,"Department of Regional Development, Manufacturing and Water",w00066
+422334A,Kings Creek at Aides Bridge,-27.92625,151.8624333,QLD,648.1,"Department of Regional Development, Manufacturing and Water",w00066
+422338A,Canal Creek at Leyburn,-28.0321,151.5853,QLD,394.8,"Department of Regional Development, Manufacturing and Water",w00066
+422394A,Condamine River at Elbow Valley,-28.371363,152.141363,QLD,328.4,"Department of Regional Development, Manufacturing and Water",w00066
+424201A,Paroo River at Caiwarro,-28.689072,144.785928,QLD,22885,"Department of Regional Development, Manufacturing and Water",w00066
+915206A,Dugald River at Railway Crossing,-20.2013,140.2233,QLD,658.8,"Department of Regional Development, Manufacturing and Water",w00066
+917107A,Elizabeth Creek at Mount Surprise,-18.13375,144.3064833,QLD,528.1,"Department of Regional Development, Manufacturing and Water",w00066
+919003A,Mitchell River at O.K. Bridge,-16.4720135,144.2904865,QLD,7734,"Department of Regional Development, Manufacturing and Water",w00066
+919005A,Rifle Creek at Font Hill,-16.6788,145.2267,QLD,368.4,"Department of Regional Development, Manufacturing and Water",w00066
+919201A,Palmer River at Goldfields,-16.1072295,144.7777705,QLD,533.4,"Department of Regional Development, Manufacturing and Water",w00066
+919309A,Walsh River at Trimbles Crossing,-16.54485,143.78485,QLD,8638,"Department of Regional Development, Manufacturing and Water",w00066
+925001A,Wenlock River at Moreton,-12.45375,142.6377,QLD,3290,"Department of Regional Development, Manufacturing and Water",w00066
+926002A,Dulhunty River at Dougs Pad,-11.83125,142.42,QLD,333.3,"Department of Regional Development, Manufacturing and Water",w00066
+A0020101,Diamantina River at Birdsville,-25.90875,139.3667,SA,119034,Department for Environment and Water,w00078
+A0030501,Cooper Creek at Cullyamurra Water Hole,-27.70125,140.8433,SA,232846,Department for Environment and Water,w00078
+A2390519,Mosquito Creek at Struan,-37.09375,140.776,SA,1550,South Australian Water Corporation (SA Water),w00209
+A2390523,Stony Creek at Woakwine Range,-37.70343,140.3622,SA,485.1,South Australian Water Corporation (SA Water),w00209
+A2390531,Morambro Creek at Bordertown-Naracoorte Road Bridge,-36.68875,140.6602382,SA,410.6,South Australian Water Corporation (SA Water),w00209
+A4260533,Bremer River near Hartley,-35.2087,139.0063,SA,465.6,Department for Environment and Water,w00078
+A5030502,Scott Creek at Scott Bottom,-35.099129,138.673371,SA,29.0,Department for Environment and Water,w00078
+A5040523,Sixth Creek at Castambul,-34.87295,138.75295,SA,47.7,Hills and Fleurieu Landscape Board,w00003
+A5050517,North Para River at Penrice,-34.46375,139.0584,SA,120.5,Department for Environment and Water,w00078
+A5060500,Wakefield River near Rhynie,-34.13,138.63,SA,500.9,Department for Environment and Water,w00078
+A5070500,Hill River near Andrews,-33.61,138.63,SA,240.3,Department for Environment and Water,w00078
+A5070503,Broughton River at Mooroola,-33.5331,138.5181,SA,2464,Department for Environment and Water,w00078
+A5090503,Kanyaka Creek at Old Kanyaka Ruins,-32.09,138.29,SA,175.7,Department for Environment and Water,w00078
+A5130501,Rocky River upstream Gorge Falls,-35.95375,136.6983,SA,187.4,Department for Environment and Water,w00078
+302200,Swan River at The Grange,-42.0467,148.075,TAS,455.5,"Department of Primary Industries, Parks, Water and Environment",w00072
+302208,Meredith River at Swansea,-42.1217,148.04,TAS,86.9,"Department of Primary Industries, Parks, Water and Environment",w00072
+303203,Coal River at Baden,-42.435,147.4533,TAS,51.5,"Department of Primary Industries, Parks, Water and Environment",w00072
+304040,Florentine River above Derwent River,-42.4417,146.515,TAS,445.0,Hydro-electric Corporation (Hydro Tasmania),w00129
+304497,Nive River at Gowan Brae,-42.03125,146.419606,TAS,174.0,Hydro-electric Corporation (Hydro Tasmania),w00129
+304499,Tyenna River at Newbury Road,-42.70695183,146.7105482,TAS,210.2,"Department of Primary Industries, Parks, Water and Environment",w00072
+305202,Snug River u/s Snug Tiers Road Bridge,-43.07076,147.23674,TAS,18.3,"Department of Primary Industries, Parks, Water and Environment",w00072
+306119,Huon River u/s Frying Pan Creek,-43.0367,146.84,TAS,1824,"Department of Primary Industries, Parks, Water and Environment",w00072
+307473,Davey River d/s Crossing River,-43.14125,145.95,TAS,698.6,"Department of Primary Industries, Parks, Water and Environment",w00072
+308145,Franklin River at Mt Fincham Track,-42.24125,145.767642,TAS,775.3,Hydro-electric Corporation (Hydro Tasmania),w00129
+308799,Collingwood River - below Alma River,-42.16375,145.92875,TAS,271.1,Hydro-electric Corporation (Hydro Tasmania),w00129
+312061,Hellyer River - Guilford Junction,-41.41875,145.67044,TAS,100.8,Hydro-electric Corporation (Hydro Tasmania),w00129
+314207,Leven River at Bannons Bridge,-41.25125,146.090026,TAS,499.3,"Department of Primary Industries, Parks, Water and Environment",w00072
+314212,Cam River u/s Somerset Water Supply,-41.06,145.8367,TAS,225.6,"Department of Primary Industries, Parks, Water and Environment",w00072
+314213,Black River at South Forest,-40.8725395,145.2975395,TAS,318.5,"Department of Primary Industries, Parks, Water and Environment",w00072
+314214,Duck River u/s Scotchtown Road Bridge,-40.8733,145.1183,TAS,346.3,"Department of Primary Industries, Parks, Water and Environment",w00072
+315450,Forth River above Lemonthyme Power Station,-41.6117,146.13125,TAS,309.6,Hydro-electric Corporation (Hydro Tasmania),w00129
+316624,Arm River - above Mersey,-41.6894,146.2154,TAS,90.6,Hydro-electric Corporation (Hydro Tasmania),w00129
+317200,Rubicon River at Tidal Limit,-41.2567,146.5667,TAS,257.5,"Department of Primary Industries, Parks, Water and Environment",w00072
+318076,North Esk River at Ballroom,-41.49375,147.384339,TAS,379.8,"Department of Primary Industries, Parks, Water and Environment",w00072
+318150,South Esk River at Llewellyn,-41.8167,147.5633,TAS,2288,Hydro-electric Corporation (Hydro Tasmania),w00129
+318181,South Esk River at Perth,-41.5983,147.2033,TAS,3285,"Department of Primary Industries, Parks, Water and Environment",w00072
+318191,Break O'Day River at Killymoon Bridge,-41.5967,148.0567,TAS,186.9,"Department of Primary Industries, Parks, Water and Environment",w00072
+318311,St Pauls River u/s South Esk River,-41.7883,147.7267,TAS,519.1,"Department of Primary Industries, Parks, Water and Environment",w00072
+319204,Pipers River d/s Yarrow Creek,-41.0667,147.11,TAS,299.5,"Department of Primary Industries, Parks, Water and Environment",w00072
+221201,Cann River (West Branch) at Weeragua,-37.373,149.2,VIC,323.2,"Department of Environment, Land, Water and Planning",w00074
+221207,Errinundra River at Errinundra,-37.44713,148.91375,VIC,159.2,"Department of Environment, Land, Water and Planning",w00074
+221208,Wingan River at Wingan Inlet National Park,-37.689,149.49,VIC,423.2,"Department of Environment, Land, Water and Planning",w00074
+221209,Cann River (East Branch) at Weeragua,-37.356,149.21,VIC,147.0,"Department of Environment, Land, Water and Planning",w00074
+221210,Genoa River at The Gorge,-37.41699,149.51949,VIC,844.1,"Department of Environment, Land, Water and Planning",w00074
+221211,Combienbar River at Combienbar,-37.44,148.98,VIC,181.8,"Department of Environment, Land, Water and Planning",w00074
+221212,Bemm River at Princes Highway,-37.606,148.9,VIC,731.2,"Department of Environment, Land, Water and Planning",w00074
+222202,Brodribb River at Sardine Creek,-37.512,148.55,VIC,648.1,"Department of Environment, Land, Water and Planning",w00074
+222206,Buchan River at Buchan,-37.49458,148.17458,VIC,850.2,"Department of Environment, Land, Water and Planning",w00074
+222213,Suggan Buggan River at Suggan Buggan,-36.95423808,148.3267381,VIC,361.4,"Department of Environment, Land, Water and Planning",w00074
+222217,Rodger River at Jacksons Crossing,-37.41,148.36,VIC,429.1,"Department of Environment, Land, Water and Planning",w00074
+223202,Tambo River at Swifts Creek,-37.26772,147.72875,VIC,899.3,"Department of Environment, Land, Water and Planning",w00074
+224201,Wonnangatta River at Waterford,-37.49,147.17,VIC,1974,"Department of Environment, Land, Water and Planning",w00074
+224206,Wonnangatta River at Crooked River,-37.40625,147.08875,VIC,1100,"Department of Environment, Land, Water and Planning",w00074
+224213,Dargo River at Lower Dargo Road,-37.49375,147.27125,VIC,669.7,"Department of Environment, Land, Water and Planning",w00074
+225110A,Jordan River downstream of Johnsons Creek,-37.68352468,146.3185247,VIC,132.1,Melbourne Water Corporation (Melbourne Water),w00151
+225213,Aberfeldy River at Beardmore,-37.854,146.43,VIC,312.5,"Department of Environment, Land, Water and Planning",w00074
+225218,Freestone Creek at Briagalong,-37.812,147.09,VIC,314.0,"Department of Environment, Land, Water and Planning",w00074
+225219,Macalister River at Glencairn,-37.5161,146.56625,VIC,570.4,"Department of Environment, Land, Water and Planning",w00074
+226204,Latrobe River at Willow Grove,-38.089,146.16,VIC,557.5,"Department of Environment, Land, Water and Planning",w00074
+226209,Moe River at Darnum,-38.206,146.0,VIC,208.3,"Department of Environment, Land, Water and Planning",w00074
+226220,Loch River at Noojee,-37.866515,146.006515,VIC,101.8,"Department of Environment, Land, Water and Planning",w00074
+226226,Tanjil River at Tanjil Junction,-37.98,146.19,VIC,299.4,"Department of Environment, Land, Water and Planning",w00074
+226402,Moe Drain at Trafalgar East,-38.176,146.21,VIC,607.7,"Department of Environment, Land, Water and Planning",w00074
+226410,Traralgon Creek at Koornalla,-38.323,146.53,VIC,86.1,"Department of Environment, Land, Water and Planning",w00074
+227200,Tarra River at Yarram,-38.538,146.68,VIC,223.2,"Department of Environment, Land, Water and Planning",w00074
+227202,Tarwin River at Meeniyan,-38.582,145.99,VIC,1071,"Department of Environment, Land, Water and Planning",w00074
+227211,Agnes River at Toora,-38.64,146.37,VIC,64.9,"Department of Environment, Land, Water and Planning",w00074
+227219,Bass River at Loch,-38.358,145.72,VIC,57.5,"Department of Environment, Land, Water and Planning",w00074
+227225,Tarra River at Fischers,-38.46875,146.5551106,VIC,20.7,"Department of Environment, Land, Water and Planning",w00074
+227226,Tarwin River East Branch at Dumbalk North,-38.499415,146.160585,VIC,129.7,"Department of Environment, Land, Water and Planning",w00074
+227227,Wilkur Creek at Leongatha,-38.39375,145.95735,VIC,105.8,"Department of Environment, Land, Water and Planning",w00074
+227231,Bass River at Glen Forbes South,-38.467,145.51,VIC,240.2,"Department of Environment, Land, Water and Planning",w00074
+227236,Powlett River d/s Foster Creek Junction,-38.559,145.71,VIC,225.4,"Department of Environment, Land, Water and Planning",w00074
+227237,Franklin River at Toora,-38.63,146.31,VIC,75.3,"Department of Environment, Land, Water and Planning",w00074
+229661A,Walsh Creek upstream of Road 1,-37.63375,145.9268,VIC,54.5,Melbourne Water Corporation (Melbourne Water),w00151
+230205,Deep Creek at Bulla (Downstream of Emu Creek Junction),-37.632,144.8,VIC,858.7,"Department of Environment, Land, Water and Planning",w00074
+230210,Saltwater Creek at Bullengarook,-37.471805,144.524305,VIC,38.7,"Department of Environment, Land, Water and Planning",w00074
+231211,Lerderderg River u/s Goodman Creek Junction,-37.63,144.43,VIC,235.4,"Department of Environment, Land, Water and Planning",w00074
+231213,Lerderderg River at Sardine Creek O'Brien Crossing,-37.49654621,144.36125,VIC,152.1,"Department of Environment, Land, Water and Planning",w00074
+231225,Werribee River at Ballan (u/s Old Western Hwy),-37.598,144.25,VIC,107.6,"Department of Environment, Land, Water and Planning",w00074
+234200,Woady Yaloak River at Pitfield,-37.809,143.59,VIC,316.9,"Department of Environment, Land, Water and Planning",w00074
+234201,Woady Yaloak River at Cressy (Yarima),-38.012,143.64,VIC,1166,"Department of Environment, Land, Water and Planning",w00074
+234203,Pirron Yallock Creek at Pirron Yallock (above H'Wy Br.),-38.354,143.42,VIC,161.3,"Department of Environment, Land, Water and Planning",w00074
+235202,Gellibrand River at Upper Gellibrand,-38.564,143.66,VIC,52.7,"Department of Environment, Land, Water and Planning",w00074
+235203,Curdies River at Curdie,-38.445,142.96,VIC,721.3,"Department of Environment, Land, Water and Planning",w00074
+235205,Arkins Creek West Branch at Wyelangta,-38.63824,143.44375,VIC,4.5,"Department of Environment, Land, Water and Planning",w00074
+235210,Lardner Creek at Gellibrand,-38.535,143.54,VIC,53.9,"Department of Environment, Land, Water and Planning",w00074
+235211,Kennedys Creek at Kennedys Creek,-38.588,143.26,VIC,263.7,"Department of Environment, Land, Water and Planning",w00074
+235224,Gellibrand River at Burrupa,-38.7,143.25,VIC,1042,"Department of Environment, Land, Water and Planning",w00074
+235234,Love Creek at Gellibrand,-38.483,143.57,VIC,76.6,"Department of Environment, Land, Water and Planning",w00074
+235237,Scotts Creek at Curdie (Digneys Bridge),-38.448,142.99,VIC,340.3,"Department of Environment, Land, Water and Planning",w00074
+236205,Merri River at Woodford,-38.316,142.48,VIC,893.1,"Department of Environment, Land, Water and Planning",w00074
+236212,Brucknell Creek at Cudgee,-38.346,142.65,VIC,225.4,"Department of Environment, Land, Water and Planning",w00074
+236213,Mount Emu Creek at Mena Park,-37.53112831,143.4663717,VIC,448.3,"Department of Environment, Land, Water and Planning",w00074
+237202,Fitzroy River at Heywood,-38.126,141.62,VIC,268.1,"Department of Environment, Land, Water and Planning",w00074
+237205,Darlot Creek at Homerton Bridge,-38.15,141.77,VIC,713.7,"Department of Environment, Land, Water and Planning",w00074
+237206,Eumeralla River at Codrington,-38.258,141.94,VIC,474.0,"Department of Environment, Land, Water and Planning",w00074
+237207,Surry River at Heathmere,-38.243,141.66,VIC,312.4,"Department of Environment, Land, Water and Planning",w00074
+238204,Wannon River at Dunkeld,-37.631,142.34,VIC,384.9,"Department of Environment, Land, Water and Planning",w00074
+238208,Jimmy Creek at Jimmy Creek,-37.37375,142.50816,VIC,23.3,"Department of Environment, Land, Water and Planning",w00074
+238223,Wando River at Wando Vale,-37.496,141.43,VIC,180.2,"Department of Environment, Land, Water and Planning",w00074
+238229,Chetwynd River at Chetwynd,-37.321,141.48,VIC,69.0,"Department of Environment, Land, Water and Planning",w00074
+238230,Stokes River at Teakettle,-37.87,141.41,VIC,197.0,"Department of Environment, Land, Water and Planning",w00074
+238231,Glenelg River at Big Cord,-37.312,142.37,VIC,54.0,"Department of Environment, Land, Water and Planning",w00074
+238235,Crawford River at Lower Crawford,-37.98,141.46,VIC,600.8,"Department of Environment, Land, Water and Planning",w00074
+401203,Mitta Mitta River at Hinnomunjie,-36.94763174,147.6073683,VIC,1519,"Department of Environment, Land, Water and Planning",w00074
+401208,Cudgewa Creek at Berringama,-36.21375,147.67782,VIC,351.1,"Department of Environment, Land, Water and Planning",w00074
+401210,Snowy Creek below Granite Flat,-36.56845402,147.413454,VIC,415.7,"Department of Environment, Land, Water and Planning",w00074
+401212,Nariel Creek at Upper Nariel,-36.446035,147.828535,VIC,251.6,"Department of Environment, Land, Water and Planning",w00074
+401216,Big River at Jokers Creek,-36.932475,147.472475,VIC,356.8,"Department of Environment, Land, Water and Planning",w00074
+401217,Gibbo River at Gibbo Park,-36.75616392,147.7088361,VIC,389.8,"Department of Environment, Land, Water and Planning",w00074
+401220,Tallangatta Creek at McCallums,-36.213,147.34,VIC,450.5,"Department of Environment, Land, Water and Planning",w00074
+402204,Yackandandah Creek at Osbornes Flat,-36.30375,146.9060831,VIC,284.1,"Department of Environment, Land, Water and Planning",w00074
+402206,Running Creek at Running Creek,-36.540185,147.044815,VIC,128.1,"Department of Environment, Land, Water and Planning",w00074
+402213,Kinchington Creek at Osbornes Flat,-36.31636,146.89375,VIC,123.8,"Department of Environment, Land, Water and Planning",w00074
+402217,Flaggy Creek at Myrtleford Road Bridge,-36.386265,146.876265,VIC,26.3,"Department of Environment, Land, Water and Planning",w00074
+403213,Fifteen Mile Creek at Greta South,-36.61953,146.24375,VIC,230.9,"Department of Environment, Land, Water and Planning",w00074
+403214,Happy Valley Creek at Rosewhite,-36.57756,146.81994,VIC,138.0,"Department of Environment, Land, Water and Planning",w00074
+403217,Rose River at Matong North,-36.824275,146.583225,VIC,180.3,"Department of Environment, Land, Water and Planning",w00074
+403221,Reedy Creek at Woolshed,-36.31125,146.60125,VIC,205.5,"Department of Environment, Land, Water and Planning",w00074
+403222,Buffalo River at Abbeyard,-36.91068,146.70125,VIC,415.0,"Department of Environment, Land, Water and Planning",w00074
+403224,Hurdle Creek at Bobinawarrah,-36.513,146.45,VIC,153.8,"Department of Environment, Land, Water and Planning",w00074
+403226,Boggy Creek at Angleside,-36.60562,146.36188,VIC,108.4,"Department of Environment, Land, Water and Planning",w00074
+403232,Morses Creek at Wandiligong,-36.75154,146.97875,VIC,124.1,"Department of Environment, Land, Water and Planning",w00074
+404207,Holland Creek at Kelfeera,-36.611525,146.059025,VIC,448.0,"Department of Environment, Land, Water and Planning",w00074
+405205,Murrindindi River at Murrindindi above Colwells,-37.4138538,145.5638538,VIC,105.8,"Department of Environment, Land, Water and Planning",w00074
+405209,Acheron River at Taggerty,-37.31772866,145.71375,VIC,629.4,"Department of Environment, Land, Water and Planning",w00074
+405212,Sunday Creek at Tallarook,-37.1,145.06,VIC,336.8,"Department of Environment, Land, Water and Planning",w00074
+405214,Delatite River at Tonga Bridge,-37.159,146.11,VIC,357.4,"Department of Environment, Land, Water and Planning",w00074
+405215,Howqua River at Glen Esk,-37.22964985,146.2071498,VIC,374.0,"Department of Environment, Land, Water and Planning",w00074
+405217,Yea River at Devlins Bridge,-37.38375,145.47319,VIC,360.6,"Department of Environment, Land, Water and Planning",w00074
+405218,Jamieson River at Gerrang Bridge,-37.29125,146.1876,VIC,364.2,"Department of Environment, Land, Water and Planning",w00074
+405219,Goulburn River at Dohertys,-37.330415,146.129585,VIC,700.2,"Department of Environment, Land, Water and Planning",w00074
+405226,Pranjip Creek at Moorilim,-36.621015,145.306485,VIC,749.4,"Department of Environment, Land, Water and Planning",w00074
+405227,Big River at Jamieson,-37.366955,146.056955,VIC,626.9,"Department of Environment, Land, Water and Planning",w00074
+405228,Hughes Creek at Tarcombe Road,-36.95,145.28,VIC,474.8,"Department of Environment, Land, Water and Planning",w00074
+405229,Wanalta Creek at Wanalta,-36.635,144.87,VIC,108.6,"Department of Environment, Land, Water and Planning",w00074
+405230,Cornella Creek at Colbinabbin,-36.604,144.81,VIC,259.3,"Department of Environment, Land, Water and Planning",w00074
+405231,King Parrot Creek at Flowerdale,-37.347,145.29,VIC,179.3,"Department of Environment, Land, Water and Planning",w00074
+405234,Seven Creeks River d/s of Polly McQuinns Weir,-36.888,145.68,VIC,149.6,"Department of Environment, Land, Water and Planning",w00074
+405238,Mollison Creek at Pyalong,-37.12049,144.85701,VIC,164.1,"Department of Environment, Land, Water and Planning",w00074
+405240,Sugarloaf Creek at Ash Bridge,-37.061,145.06,VIC,609.2,"Department of Environment, Land, Water and Planning",w00074
+405241,Rubicon River at Rubicon,-37.291,145.83,VIC,127.9,"Department of Environment, Land, Water and Planning",w00074
+405245,Ford Creek at Mansfield,-37.03875,146.05375,VIC,115.4,"Department of Environment, Land, Water and Planning",w00074
+405248,Major Creek at Graytown,-36.85375,144.9146,VIC,287.6,"Department of Environment, Land, Water and Planning",w00074
+405251,Brankeet Creek at Ancona,-36.96886,145.78375,VIC,121.8,"Department of Environment, Land, Water and Planning",w00074
+405263,Goulburn River u/s of Snake Creek Junction,-37.462845,146.247155,VIC,328.9,"Department of Environment, Land, Water and Planning",w00074
+405264,Big River d/s of Frenchman Creek Junction,-37.52125,146.07596,VIC,335.4,"Department of Environment, Land, Water and Planning",w00074
+405274,Home Creek at Yarck,-37.10625,145.60513,VIC,186.7,"Department of Environment, Land, Water and Planning",w00074
+406208,Campaspe River at Ashbourne,-37.38787,144.45125,VIC,37.6,"Department of Environment, Land, Water and Planning",w00074
+406213,Campaspe River at Redesdale,-37.01645858,144.5389586,VIC,633.8,"Department of Environment, Land, Water and Planning",w00074
+406214,Axe Creek at Longlea,-36.77406,144.42844,VIC,237.0,"Department of Environment, Land, Water and Planning",w00074
+406224,Mount Pleasant Creek at Runnymede,-36.54625,144.6373,VIC,246.3,"Department of Environment, Land, Water and Planning",w00074
+406226,Mount Ida Creek at Derrinal,-36.881,144.65,VIC,171.6,"Department of Environment, Land, Water and Planning",w00074
+406235,Wild Duck Creek u/s of Heathcote-Mia Mia Road,-36.948,144.66,VIC,212.3,"Department of Environment, Land, Water and Planning",w00074
+406250,Coliban River at Springhill-Tylden Road,-37.32,144.37,VIC,77.5,"Department of Environment, Land, Water and Planning",w00074
+407213,McCallums Creek at Carisbrook,-37.085,143.81,VIC,471.5,"Department of Environment, Land, Water and Planning",w00074
+407214,Creswick Creek at Clunes,-37.29668,143.78875,VIC,299.9,"Department of Environment, Land, Water and Planning",w00074
+407230,Joyces Creek at Strathlea,-37.162125,143.960375,VIC,156.0,"Department of Environment, Land, Water and Planning",w00074
+407253,Piccaninny Creek at Minto,-36.4519,144.4694,VIC,652.1,"Department of Environment, Land, Water and Planning",w00074
+408200,Avoca River at Coonooer,-36.4379661,143.29875,VIC,2677,"Department of Environment, Land, Water and Planning",w00074
+408202,Avoca River at Amphitheatre,-37.18198279,143.4055172,VIC,82.6,"Department of Environment, Land, Water and Planning",w00074
+408206,Avoca River at Archdale Junction,-36.885,143.5,VIC,678.0,"Department of Environment, Land, Water and Planning",w00074
+415201,Wimmera River at Glenorchy Weir Tail Gauge,-36.909,142.64,VIC,1976,"Department of Environment, Land, Water and Planning",w00074
+415207,Wimmera River at Eversley,-37.185295,143.184705,VIC,304.5,"Department of Environment, Land, Water and Planning",w00074
+415220,Avon River at Wimmera Highway,-36.64,142.98,VIC,543.0,"Department of Environment, Land, Water and Planning",w00074
+415226,Richardson River at Carrs Plains,-36.74375,142.7872,VIC,124.9,"Department of Environment, Land, Water and Planning",w00074
+415237,Concongella Creek at Stawell,-37.026325,142.821325,VIC,244.2,"Department of Environment, Land, Water and Planning",w00074
+415238,Wattle Creek at Navarre,-36.902,143.11,VIC,139.7,"Department of Environment, Land, Water and Planning",w00074
+415245,Mount Cole Creek at Crowlands,-37.165,143.09,VIC,159.2,"Department of Environment, Land, Water and Planning",w00074
+224214,Wentworth River at Tabberabbera,-37.494565,147.392935,Vic,438.9,"Department of Environment, Land, Water and Planning",w00074
+602004,Kalgan River - Stevens Farm,-34.8861,118.0,WA,2433,Department of Water and Environmental Regulation,w00076
+603003,Denmark River - Kompup,-34.6994,117.2169,WA,234.7,Department of Water and Environmental Regulation,w00076
+603004,Hay River - Sunny Glen,-34.9108,117.4783,WA,1240,Department of Water and Environmental Regulation,w00076
+603005,Mitchell River - Beigpiegup,-34.8276,117.3929,WA,48.3,Department of Water and Environmental Regulation,w00076
+603007,Sleeman River - Sleeman Rd Bridge,-34.9583,117.5032,WA,79.6,Department of Water and Environmental Regulation,w00076
+603136,Denmark River - Mt Lindesay,-34.8667,117.315,WA,523.4,Department of Water and Environmental Regulation,w00076
+603190,Yate Flat Creek - Woonanup,-34.7038,117.2921,WA,53.4,Department of Water and Environmental Regulation,w00076
+604001,Kent River - Rocky Glen,-34.6227,117.0353,WA,1072,Department of Water and Environmental Regulation,w00076
+604053,Kent River - Styx Junction,-34.8882125,117.0867875,WA,1786,Department of Water and Environmental Regulation,w00076
+605012,Frankland River - Mount Frankland,-34.9062,116.7885,WA,4467,Department of Water and Environmental Regulation,w00076
+606001,Deep River - Teds Pool,-34.7650475,116.6175475,WA,473.7,Department of Water and Environmental Regulation,w00076
+606002,Weld River - Wattle Block,-34.6938678,116.5188678,WA,73.1,Department of Water and Environmental Regulation,w00076
+606195,Weld River - Ordnance Rd Crossing,-34.8069,116.5752,WA,246.0,Department of Water and Environmental Regulation,w00076
+607003,Warren River - Wheatley Farm,-34.3694,116.2777,WA,2985,Department of Water and Environmental Regulation,w00076
+607004,Perup River - Quabicup Hill,-34.3311,116.4585,WA,661.3,Department of Water and Environmental Regulation,w00076
+607007,Tone River - Bullilup,-34.2503,116.679,WA,979.9,Department of Water and Environmental Regulation,w00076
+607013,Lefroy Brook - Rainbow Trail,-34.4275,116.016,WA,248.5,Department of Water and Environmental Regulation,w00076
+607144,Wilgarup River - Quintarrup,-34.3486,116.3475,WA,469.7,Department of Water and Environmental Regulation,w00076
+607220,Warren River - Barker Rd Crossing,-34.5217,115.8994,WA,4104,Department of Water and Environmental Regulation,w00076
+608002,Carey Brook - Staircase Rd,-34.39189222,115.8431078,WA,48.3,Department of Water and Environmental Regulation,w00076
+608151,Donnelly River - Strickland,-34.3272,115.7846,WA,773.8,Department of Water and Environmental Regulation,w00076
+609002,Scott River - Brennans Ford,-34.2761,115.3022,WA,640.9,Department of Water and Environmental Regulation,w00076
+609005,Balgarup River - Mandelup Pool,-33.9075,117.1422,WA,83.0,Department of Water and Environmental Regulation,w00076
+609010,Northern Arthur River - Lake Toolibin Inflow,-32.9048,117.614,WA,436.9,Department of Water and Environmental Regulation,w00076
+609018,St John Brook - Barrabup Pool,-33.9435,115.6914,WA,543.5,Department of Water and Environmental Regulation,w00076
+610001,Margaret River - Willmots Farm,-33.9422,115.0549,WA,435.0,Department of Water and Environmental Regulation,w00076
+611004,Preston River - Boyanup Bridge,-33.479,115.734,WA,817.9,Department of Water and Environmental Regulation,w00076
+611111,Thomson Brook - Woodperry Homestead,-33.6284,115.9476,WA,104.2,Department of Water and Environmental Regulation,w00076
+612001,Collie River East - Coolangatta Farm,-33.3303,116.2632,WA,1331,Department of Water and Environmental Regulation,w00076
+612014,Bingham River - Palmer,-33.2776,116.2756,WA,363.5,Department of Water and Environmental Regulation,w00076
+612025,Camballan Creek - James Well,-33.4557,116.4258,WA,176.5,Department of Water and Environmental Regulation,w00076
+612034,Collie River - South Branch,-33.387,116.1634,WA,672.0,Department of Water and Environmental Regulation,w00076
+612230,Collie River East Trib - James Crossing,-33.3814,116.5811,WA,169.4,Department of Water and Environmental Regulation,w00076
+613002,Harvey River - Dingo Rd,-33.08625,116.03875,WA,148.0,Department of Water and Environmental Regulation,w00076
+613146,Clarke Brook - Hillview Farm,-32.99875,115.92196,WA,18.7,Department of Water and Environmental Regulation,w00076
+614006,Murray River - Baden Powell,-32.7722,116.0843,WA,6773,Department of Water and Environmental Regulation,w00076
+614037,Big Brook - O'Neil Rd,-32.5113,116.1902,WA,146.6,Department of Water and Environmental Regulation,w00076
+614044,Yarragil Brook - Yarragil Formation,-32.8120035,116.1545035,WA,80.0,Department of Water and Environmental Regulation,w00076
+614196,Williams River - Saddleback Rd Bridge,-32.9934,116.4278,WA,1418,Department of Water and Environmental Regulation,w00076
+614224,Hotham River - Marradong Rd Bridge,-32.8656,116.3981,WA,3974,Department of Water and Environmental Regulation,w00076
+616001,Wooroloo Brook - Karls Ranch,-31.7337,116.1164,WA,512.3,Department of Water and Environmental Regulation,w00076
+616002,Darkin River - Pine Plantation,-32.06875,116.292746,WA,641.6,Department of Water and Environmental Regulation,w00076
+616006,Brockman River - Tanamerah,-31.3442,116.0916,WA,960.1,Department of Water and Environmental Regulation,w00076
+616013,Helena River - Ngangaguringuring,-31.93875,116.403203,WA,316.2,Department of Water and Environmental Regulation,w00076
+616019,Brockman River - Yalliawirra,-31.6744,116.1178,WA,1521,Department of Water and Environmental Regulation,w00076
+616041,Wungong Brook - Vardi Rd,-32.2479,116.1124,WA,79.5,Department of Water and Environmental Regulation,w00076
+616178,Jane Brook - National Park,-31.884,116.0948,WA,73.5,Department of Water and Environmental Regulation,w00076
+616216,Helena River - Poison Lease Gs,-31.9731,116.2903,WA,593.8,Department of Water and Environmental Regulation,w00076
+617002,Hill River - Hill River Springs,-30.2771,115.3666,WA,770.4,Department of Water and Environmental Regulation,w00076
+617003,Gingin Brook - Bookine Bookine,-31.3194,115.627,WA,1325,Department of Water and Environmental Regulation,w00076
+701002,Greenough River - Karlanew Peak,-28.8242,114.8455,WA,11795,Department of Water and Environmental Regulation,w00076
+701007,Chapman River - Utakarra,-28.7629,114.6688,WA,1836,Department of Water and Environmental Regulation,w00076
+701009,Irwin River - Mountain Bridge,-29.238,115.0351,WA,5224,Department of Water and Environmental Regulation,w00076
+704139,Gascoyne River - Nine Mile Bridge,-24.8276,113.7691,WA,72902,Department of Water and Environmental Regulation,w00076
+704193,Gascoyne River - Fishy Pool,-24.9497,114.6442,WA,71261,Department of Water and Environmental Regulation,w00076
+705001,Minilya River - Minilya Bridge,-23.8163,114.0103,WA,4642,Department of Water and Environmental Regulation,w00076
+707002,Robe River - Yarraloola,-21.6162,115.9225,WA,7263,Department of Water and Environmental Regulation,w00076
+707005,Cane River - Toolunga,-22.0226,115.5945,WA,2331,Department of Water and Environmental Regulation,w00076
+708011,Fortescue River - Newman,-23.4014,119.7943,WA,2877,Department of Water and Environmental Regulation,w00076
+709010,Turner River - Pincunah,-21.2305,118.8338,WA,907.2,Department of Water and Environmental Regulation,w00076
+710003,De Grey River - Coolenar Pool,-20.3114,119.249,WA,53323,Department of Water and Environmental Regulation,w00076
+710229,Shaw River - North Pole Mine,-21.0943,119.3173,WA,6503,Department of Water and Environmental Regulation,w00076
+802055,Fitzroy River - Fitzroy Crossing,-18.2963,125.5263,WA,46350,Department of Water and Environmental Regulation,w00076
+803003,Fletcher River - Dromedary,-17.12886331,124.9886367,WA,65.4,Department of Water and Environmental Regulation,w00076
+809310,Ord River - Bedford Downs,-17.42547077,127.6004708,WA,550.7,Department of Water and Environmental Regulation,w00076
+809315,Negri River Mistake Creek - Homestead,-17.1775,129.0925,WA,7490,Department of Water and Environmental Regulation,w00076
+809316,Ord River - Old Ord Homestead,-17.3738,128.8537,WA,19587,Department of Water and Environmental Regulation,w00076
+809321,Dunham River - Dunham Gorge,-16.1863,128.3,WA,1637,Department of Water and Environmental Regulation,w00076
+809322,Wilson River - Odonnell Range,-16.6475,128.0925,WA,2515,Department of Water and Environmental Regulation,w00076

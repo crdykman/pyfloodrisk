@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfloodrisk"
+version = "0.1.0"
+description = "Flood Risk Assessment Workflow for GR4H-Based Design Flood Analysis"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Ze Jiang", email = "ze.jiang@unsw.edu.au" },
+    { name = "Caleb Dykman", email = "caleb.dykman@unsw.edu.au" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+    "numba>=0.57",
+    "spotpy>=1.5",
+    "seaborn>=0.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+"pyfloodrisk.data" = ["**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
