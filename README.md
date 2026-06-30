@@ -29,13 +29,7 @@ external data.
 ## Installation
 
 ```bash
-pip install -e .
-```
-
-For running the test suite:
-
-```bash
-pip install -e ".[dev]"
+pip install pyfloodrisk
 ```
 
 ## Quickstart
@@ -45,9 +39,6 @@ from pyfloodrisk import run_demo_workflow
 
 results = run_demo_workflow(station="421026")
 ```
-
-## Development
-
 
 ## License
 
