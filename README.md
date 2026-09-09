@@ -21,6 +21,11 @@ from streamflow calibration through to design flood simulation:
 - **Design flood simulation** — runs GR4H forward across design storm
   patterns and antecedent states to produce a design flood ensemble
   (`simulate_design_flood`, `run_demo_workflow`).
+- **Derived flood frequency analysis** — a stratified Monte Carlo (joint
+  probability) framework in the ARR/RORB form, with the sampled initial
+  loss replaced by a GR4H state vector drawn jointly from a continuous
+  run, producing a full flood frequency curve rather than a single design
+  event (`pyfloodrisk.dffa`; see [docs/dffa.md](docs/dffa.md)).
 
 A small bundled demo dataset (climate data and design storm increments
 for two stations) lets the whole workflow run end-to-end without any
@@ -32,13 +37,33 @@ external data.
 pip install pyfloodrisk
 ```
 
+Optional extra: `pip install pyfloodrisk[copula]` for the copula and KDE
+methods of sampling the initial state distribution.
+
 ## Quickstart
+
+Design flood ensemble for one design storm:
 
 ```python
 from pyfloodrisk import run_demo_workflow
 
 results = run_demo_workflow(station="421026")
 ```
+
+Derived flood frequency curve across the whole probability domain:
+
+```python
+from pyfloodrisk import run_dffa
+
+out = run_dffa(station="421026")
+print(out["results"].summary())
+```
+
+`run_dffa` is a demonstration — its design rainfalls are fitted to the
+station's own six-year record and its parameters are plausible rather
+than calibrated. [docs/dffa.md](docs/dffa.md) sets out what to replace
+before the numbers mean anything, and `examples/dffa_demo.py` builds the
+same analysis input by input.
 
 ## License
 

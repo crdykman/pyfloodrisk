@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfloodrisk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Flood Risk Assessment Workflow for GR4H-Based Design Flood Analysis"
 readme = "README.md"
 license = { text = "MIT" }
@@ -20,10 +20,14 @@ dependencies = [
     "numba>=0.57",
     "spotpy>=1.5",
     "seaborn>=0.12",
+    "matplotlib>=3.7",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov"]
+# Copula and KDE methods for sampling the initial state distribution
+# (pyfloodrisk.dffa.states); the default bootstrap method needs none of it.
+copula = ["pyvinecopulib>=0.6"]
 
 [project.urls]
 Repository = "https://github.com/crdykman/pyfloodrisk"

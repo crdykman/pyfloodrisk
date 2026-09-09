@@ -245,6 +245,114 @@ class GR4H(BaseModel):
 
         return outputs
 
+    # --------------------------------------------------------------------
+    # Explicit model state
+    #
+    # ``run`` starts from the two storage *fractions* with empty unit
+    # hydrographs, which is all a continuous simulation needs.  Design
+    # event simulation needs more: an event has to be hot-started from the
+    # complete state left behind by a continuous run, including the water
+    # already in transit through the unit hydrographs.  The methods below
+    # expose that state.
+    # --------------------------------------------------------------------
+
+    @property
+    def n_uh1(self):
+        """Length of the UH1 memory (timesteps) for the current x4."""
+        return int(math.ceil(self.params["x4"]))
+
+    @property
+    def n_uh2(self):
+        """Length of the UH2 memory (timesteps) for the current x4."""
+        return int(math.ceil(2.0 * self.params["x4"]))
+
+    def uh_ordinates(self):
+        """Return the UH1 and UH2 unit hydrograph ordinates."""
+        ouh1, ouh2, _, _ = _compute_unitary_hydrograph(self.params["x4"])
+        return ouh1, ouh2
+
+    def initial_state(self, prod_frac=None, rout_frac=None):
+        """Build a state dict, by default from the ``ps0``/``rs0`` params.
+
+        Parameters
+        ----------
+        prod_frac, rout_frac : float, optional
+            Production/routing storage as a fraction of x1/x3. Default to
+            the model's ``ps0``/``rs0`` parameters.
+
+        Returns
+        -------
+        dict with keys ``prod_store``, ``rout_store`` (mm) and ``uh1``,
+        ``uh2`` (empty unit-hydrograph memory).
+        """
+        ps = self.params["ps0"] if prod_frac is None else prod_frac
+        rs = self.params["rs0"] if rout_frac is None else rout_frac
+        return {
+            "prod_store": float(ps) * self.params["x1"],
+            "rout_store": float(rs) * self.params["x3"],
+            "uh1": np.zeros(self.n_uh1),
+            "uh2": np.zeros(self.n_uh2),
+        }
+
+    def run_from_state(self, prec, pet, state=None, record_uh=False):
+        """Run GR4H from an explicit initial state.
+
+        Parameters
+        ----------
+        prec, pet : array_like
+            Precipitation and potential evapotranspiration (mm/hr).
+        state : dict, optional
+            Initial state with keys ``prod_store`` and ``rout_store``
+            (storage in mm) and optionally ``uh1``/``uh2`` (memory in mm,
+            padded or truncated to the model's UH lengths).  Defaults to
+            :meth:`initial_state`.
+        record_uh : bool, optional
+            Return the unit-hydrograph memory at every timestep rather
+            than only at the end.  Needed to build a state table for
+            design event sampling; costs ``n * (n_uh1 + n_uh2)`` floats.
+
+        Returns
+        -------
+        dict with keys ``qt``, ``qd``, ``qb`` (mm/hr), ``qt_cumecs``
+        (m3/s), ``gwe``, ``prod_store``, ``rout_store`` (mm per timestep),
+        ``uh1``, ``uh2`` (2-D memory, one row per recorded timestep) and
+        ``final_state`` (a state dict, ready to resume from).
+        """
+        if state is None:
+            state = self.initial_state()
+        prec = np.ascontiguousarray(prec, dtype=float)
+        pet = np.ascontiguousarray(pet, dtype=float)
+        if prec.size != pet.size:
+            raise ValueError("prec and pet must be the same length")
+
+        uh1 = np.asarray(state.get("uh1", np.zeros(self.n_uh1)), dtype=float).ravel()
+        uh2 = np.asarray(state.get("uh2", np.zeros(self.n_uh2)), dtype=float).ravel()
+
+        qt, qd, qb, gwe, prod, rout, uh1_hist, uh2_hist = _gr4h_from_state(
+            prec, pet,
+            self.params["x1"], self.params["x2"],
+            self.params["x3"], self.params["x4"],
+            float(state["prod_store"]), float(state["rout_store"]),
+            uh1, uh2, bool(record_uh),
+        )
+        return {
+            "qt": qt,
+            "qt_cumecs": qt * self.area / 3.6,
+            "qd": qd,
+            "qb": qb,
+            "gwe": gwe,
+            "prod_store": prod,
+            "rout_store": rout,
+            "uh1": uh1_hist,
+            "uh2": uh2_hist,
+            "final_state": {
+                "prod_store": float(prod[-1]) if prod.size else state["prod_store"],
+                "rout_store": float(rout[-1]) if rout.size else state["rout_store"],
+                "uh1": uh1_hist[-1].copy(),
+                "uh2": uh2_hist[-1].copy(),
+            },
+        }
+
 
 # ==============================================================================
 # Subroutines for model processes
@@ -371,21 +479,86 @@ def _gr4h(prec, pet, x1, x2, x3, x4, ps0, rs0):
     Returns
     -------
     Tuple of arrays (qt, qd, qb, gw_exchange, ps, rs), each the same
-    length as prec/pet.
+    length as prec/pet.  ``ps``/``rs`` are storage fractions.
+    """
+    # Cold start: empty unit-hydrograph memory, stores set by fraction
+    nuh1 = int(math.ceil(x4))
+    nuh2 = int(math.ceil(2.0 * x4))
+    qt, qd, qr, gw, ps, rs, _, _ = _gr4h_from_state(
+        prec, pet, x1, x2, x3, x4, ps0 * x1, rs0 * x3,
+        np.zeros(nuh1), np.zeros(nuh2), False
+    )
+    return (
+        qt.astype(np.float32),
+        qd.astype(np.float32),
+        qr.astype(np.float32),
+        gw.astype(np.float32),
+        (ps / x1).astype(np.float32),
+        (rs / x3).astype(np.float32),
+    )
+
+
+@nb.jit(nopython=True)
+def _gr4h_from_state(prec, pet, x1, x2, x3, x4, prod_store, rout_store,
+                     uh1_init, uh2_init, record_uh):
+    """Run GR4H from an explicit initial state, reporting the state in mm.
+
+    Same production/routing scheme as :func:`_gr4h`, but the initial
+    condition is the *full* model state -- both stores in mm plus the
+    unit-hydrograph memory -- instead of the two storage fractions, and
+    the stores are reported in mm rather than as fractions.  That is what
+    lets a design event be hot-started from a state drawn out of a long
+    continuous run (see :meth:`GR4H.run_from_state`).
+
+    Parameters
+    ----------
+    prec, pet : ndarray
+        Precipitation and potential evapotranspiration (mm/hr).
+    x1, x2, x3, x4 : float
+        GR4H model parameters (see :class:`GR4H`).
+    prod_store, rout_store : float
+        Initial production/routing storage (mm).
+    uh1_init, uh2_init : ndarray
+        Initial unit-hydrograph memory (mm).  Shorter or longer arrays are
+        padded with zeros or truncated to ceil(x4) and ceil(2*x4).
+    record_uh : bool
+        If True the UH memory is returned for every timestep, which is how
+        a state table for design-event sampling is built.  If False only
+        the final memory is returned, as a single row.
+
+    Returns
+    -------
+    Tuple of arrays (qt, qd, qb, gw_exchange, prod, rout, uh1, uh2).  The
+    flow arrays are mm/hr; ``prod``/``rout`` are storages in mm at the end
+    of each timestep; ``uh1``/``uh2`` are 2-D, one row per recorded step.
+
+    Notes
+    -----
+    The state recorded at step ``t`` is the state *after* step ``t`` has
+    been routed, so feeding row ``t`` back in as the initial condition
+    resumes the simulation at step ``t + 1`` exactly.
     """
     # Create empty arrays
     n = len(prec)
-    qtarray = np.zeros(n, dtype=np.float32)
-    qdarray = np.zeros(n, dtype=np.float32)
-    qrarray = np.zeros(n, dtype=np.float32)
-    gwarray = np.zeros(n, dtype=np.float32)
-    psarray = np.zeros(n, dtype=np.float32)
-    rsarray = np.zeros(n, dtype=np.float32)
+    qtarray = np.zeros(n)
+    qdarray = np.zeros(n)
+    qrarray = np.zeros(n)
+    gwarray = np.zeros(n)
+    psarray = np.zeros(n)
+    rsarray = np.zeros(n)
 
     # Initial parameters
     ouh1, ouh2, uh1, uh2 = _compute_unitary_hydrograph(x4)
-    psto = ps0 * x1
-    rsto = rs0 * x3
+    for i in range(min(len(uh1), len(uh1_init))):
+        uh1[i] = uh1_init[i]
+    for j in range(min(len(uh2), len(uh2_init))):
+        uh2[j] = uh2_init[j]
+    psto = prod_store
+    rsto = rout_store
+
+    nrec = n if record_uh else 1
+    uh1_hist = np.zeros((nrec, len(uh1)))
+    uh2_hist = np.zeros((nrec, len(uh2)))
 
     # Compute water partioning
     for t in range(n):
@@ -400,6 +573,12 @@ def _gr4h(prec, pet, x1, x2, x3, x4, ps0, rs0):
 
         uh1, uh2 = _compute_hydrograph(rout_pat, ouh1, ouh2, uh1, uh2)
 
+        if record_uh:
+            for i in range(len(uh1)):
+                uh1_hist[t, i] = uh1[i]
+            for j in range(len(uh2)):
+                uh2_hist[t, j] = uh2[j]
+
         gw_exc, rsto = _compute_exchange(uh1, rsto, x2, x3)
 
         qr, qd, rsto = _compute_discharge(uh2, gw_exc, rsto, x3)
@@ -410,7 +589,14 @@ def _gr4h(prec, pet, x1, x2, x3, x4, ps0, rs0):
         qdarray[t] = qd  # runoff
         qrarray[t] = qr  # baseflow
         gwarray[t] = gw_exc  # groundwater exchange
-        psarray[t] = psto / x1  # production storage
-        rsarray[t] = rsto / x3  # routing storage
+        psarray[t] = psto  # production storage (mm)
+        rsarray[t] = rsto  # routing storage (mm)
 
-    return qtarray, qdarray, qrarray, gwarray, psarray, rsarray
+    if not record_uh:
+        for i in range(len(uh1)):
+            uh1_hist[0, i] = uh1[i]
+        for j in range(len(uh2)):
+            uh2_hist[0, j] = uh2[j]
+
+    return (qtarray, qdarray, qrarray, gwarray, psarray, rsarray,
+            uh1_hist, uh2_hist)
