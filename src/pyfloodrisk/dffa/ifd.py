@@ -33,14 +33,11 @@ import pandas as pd
 from scipy.interpolate import PchipInterpolator
 from scipy.stats import norm
 
-__all__ = ["IFDCurve", "unit_arf", "ARR2019LongDurationARF", "ifd_table_from_csv",
-           "ifd_from_record"]
+__all__ = ["IFDCurve", "unit_arf", "ARR2019LongDurationARF", "ifd_table_from_csv"]
 
-#: AEPs the record-based fit is tabulated at by default.
+#: AEPs the bundled demo tables are tabulated at, and a reasonable default for
+#: :meth:`IFDCurve.as_frame`.
 DEFAULT_IFD_AEPS = (0.5, 0.2, 0.1, 0.05, 0.02, 0.01)
-
-#: Hours in a mean year, for converting a record length to years.
-HOURS_PER_YEAR = 365.25 * 24.0
 
 
 def _as_array(x):
@@ -173,11 +170,14 @@ def ifd_table_from_csv(path, duration_col: str = "duration_h",
 
     AEP column headers may be fractions (``0.01``), percentages (``1%``) or
     average recurrence intervals (``1 in 100``, ``100y``).  Depths are mm.
+    Lines beginning ``#`` are ignored, so a table can carry its provenance
+    at the top of the file (the bundled demo tables do).
 
-    A BoM IFD download is *not* in this layout -- it carries a metadata
-    preamble and its own column naming, and the layout has changed between
-    releases -- so extract the depths you want into a tidy table like the
-    above rather than pointing this at the download unedited.
+    This is the only way design rainfalls enter the framework.  A BoM IFD
+    download is *not* in the layout above -- it carries a metadata preamble
+    and its own column naming, and the layout has changed between releases
+    -- so extract the depths you want into a tidy table like the above
+    rather than pointing this at the download unedited.
 
     Parameters
     ----------
@@ -192,7 +192,7 @@ def ifd_table_from_csv(path, duration_col: str = "duration_h",
     -------
     DataFrame indexed by duration in hours, columns AEP as a fraction.
     """
-    raw = pd.read_csv(path)
+    raw = pd.read_csv(path, comment="#", skip_blank_lines=True)
     cols = {str(c).strip().lower(): c for c in raw.columns}
     key = duration_col.strip().lower()
     if key not in cols:
@@ -226,130 +226,6 @@ def _parse_aep(label) -> float:
     if value > 1.0:                               # bare percentage
         return value / 100.0
     return value
-
-
-def ifd_from_record(prec, durations_h: Sequence[float], dt_hours: float = 1.0,
-                    aeps: Sequence[float] = DEFAULT_IFD_AEPS,
-                    events_per_year: float = 2.0,
-                    separation_multiple: float = 1.0,
-                    plotting_position: float = 0.4) -> pd.DataFrame:
-    """Fit a design rainfall table to an observed rainfall record.
-
-    A log-normal frequency curve is fitted, per duration, to the *annual
-    exceedance series* of the record: the largest independent burst depths,
-    ``events_per_year`` of them per year of record on average, with
-    exceedance rates from the plotting position
-
-        EY_i = (i - a) / (n_years + 1 - 2a),   AEP = 1 - exp(-EY)
-
-    and ``log(depth)`` regressed on the standard normal variate of the AEP.
-
-    **This is not a design IFD.**  ARR design rainfalls are regionalised
-    from the whole gauge network and extend to AEPs no single record can
-    support; a fit to a few years of one pluviograph will be both biased and
-    imprecise, and extrapolating it to the rare end is meaningless.  It is
-    here so the framework can be demonstrated end to end on nothing but a
-    rainfall record, and as a way of asking how far the design rainfalls sit
-    from the ones your own gauge implies.  For anything you intend to report,
-    pass BoM IFD depths through :func:`ifd_table_from_csv`.
-
-    Parameters
-    ----------
-    prec :
-        Rainfall in mm per timestep, evenly spaced, missing values as NaN.
-    durations_h :
-        Burst durations to tabulate (hours); each must be a whole number of
-        timesteps.
-    dt_hours :
-        Record timestep in hours.
-    aeps :
-        AEPs to tabulate the fitted curve at.
-    events_per_year :
-        Size of the annual exceedance series, per year of record.  2 is the
-        usual choice for a partial duration series.
-    separation_multiple :
-        Minimum separation between retained bursts, as a multiple of the
-        burst duration, so that one storm contributes one burst.
-    plotting_position :
-        ``a`` in the plotting position above; 0.4 is Cunnane's.
-
-    Returns
-    -------
-    DataFrame indexed by duration in hours with one column per AEP, ready
-    for :class:`IFDCurve`.
-    """
-    prec = np.asarray(prec, float).ravel()
-    if prec.size < 2:
-        raise ValueError("need a rainfall record to fit to")
-    n_years = prec.size * dt_hours / HOURS_PER_YEAR
-    if n_years < 1.0:
-        raise ValueError(f"record is only {n_years:.2f} years long")
-    aeps = np.asarray(aeps, float)
-    z_target = norm.ppf(1.0 - aeps)
-
-    rows = {}
-    for duration_h in durations_h:
-        k = int(round(float(duration_h) / dt_hours))
-        if k < 1:
-            raise ValueError(
-                f"duration {duration_h} h is shorter than the {dt_hours} h timestep")
-        depths = _burst_depths(prec, k)
-        if not np.isfinite(depths).any():
-            raise ValueError(f"no complete {duration_h} h bursts in the record")
-        m = max(3, int(round(events_per_year * n_years)))
-        peaks = _independent_peaks(depths, m, max(1, int(round(
-            separation_multiple * k))))
-        if peaks.size < 3:
-            raise ValueError(f"only {peaks.size} independent bursts at "
-                             f"{duration_h} h; need at least 3 to fit")
-        # exceedance rate (events per year) of each ranked burst, then AEP
-        i = np.arange(1, peaks.size + 1, dtype=float)
-        a = float(plotting_position)
-        ey = (i - a) / (n_years + 1.0 - 2.0 * a)
-        # AEP = 1 - exp(-EY), so the normal variate of non-exceedance is
-        # norm.ppf(exp(-EY)) directly
-        z = norm.ppf(np.exp(-ey))
-        slope, intercept = np.polyfit(z, np.log(peaks), 1)
-        if slope <= 0:
-            raise ValueError(
-                f"fitted growth at {duration_h} h is not increasing with "
-                "rarity; the record is too short or too dry to fit")
-        rows[float(duration_h)] = np.exp(intercept + slope * z_target)
-
-    return pd.DataFrame(rows, index=pd.Index(aeps, name="aep")).T.rename_axis(
-        "duration_h")
-
-
-def _burst_depths(prec: np.ndarray, k: int) -> np.ndarray:
-    """Rolling ``k``-step rainfall totals, NaN where the window is incomplete."""
-    if k == 1:
-        return prec.copy()
-    ok = np.isfinite(prec)
-    filled = np.where(ok, prec, 0.0)
-    cum = np.concatenate([[0.0], np.cumsum(filled)])
-    total = cum[k:] - cum[:-k]
-    counted = np.concatenate([[0.0], np.cumsum(ok.astype(float))])
-    complete = (counted[k:] - counted[:-k]) == k
-    return np.where(complete, total, np.nan)
-
-
-def _independent_peaks(depths: np.ndarray, m: int, separation: int) -> np.ndarray:
-    """The ``m`` largest burst depths, no two within ``separation`` steps.
-
-    Greedy from the largest down, which is the standard way of thinning a
-    partial duration series so that one storm contributes one burst.
-    """
-    order = np.argsort(np.where(np.isfinite(depths), depths, -np.inf))[::-1]
-    chosen: list[int] = []
-    for idx in order:
-        if not np.isfinite(depths[idx]) or depths[idx] <= 0:
-            break
-        if all(abs(int(idx) - c) >= separation for c in chosen):
-            chosen.append(int(idx))
-            if len(chosen) == m:
-                break
-    return np.sort(depths[np.array(chosen, dtype=int)])[::-1] if chosen \
-        else np.empty(0)
 
 
 # --------------------------------------------------------------------- ARF

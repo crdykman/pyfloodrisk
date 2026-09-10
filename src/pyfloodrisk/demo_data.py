@@ -14,7 +14,7 @@ def demo_paths() -> dict[str, Path]:
 
     Returns
     -------
-    dict with keys ``root``, ``climate``, ``storms``, ``stations``.
+    dict with keys ``root``, ``climate``, ``storms``, ``ifd``, ``stations``.
     """
     with importlib.resources.path("pyfloodrisk.data", "__init__.py") as p:
         root = p.parent
@@ -22,6 +22,7 @@ def demo_paths() -> dict[str, Path]:
         "root": root,
         "climate": root / "GR4H_climatedata",
         "storms": root / "storms",
+        "ifd": root / "ifd",
         "stations": root / "hrs_station_details.csv",
     }
 

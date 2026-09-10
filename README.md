@@ -59,9 +59,11 @@ out = run_dffa(station="421026")
 print(out["results"].summary())
 ```
 
-`run_dffa` is a demonstration — its design rainfalls are fitted to the
-station's own six-year record and its parameters are plausible rather
-than calibrated. [docs/dffa.md](docs/dffa.md) sets out what to replace
+`run_dffa` is a demonstration — its design rainfalls come from a bundled
+demo table fitted to the station's own six-year record, not from BoM IFD
+depths, and its parameters are plausible rather than calibrated. Supply
+your own depths with `ifd_table_from_csv`, which is the only way design
+rainfalls enter. [docs/dffa.md](docs/dffa.md) sets out what to replace
 before the numbers mean anything, and `examples/dffa_demo.py` builds the
 same analysis input by input.
 

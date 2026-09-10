@@ -13,8 +13,10 @@ initial state distribution   a continuous GR4H run over the station's
                              climate record (:func:`continuous_state_table`)
 temporal patterns            the station's ARR Data Hub increments file
                              (:func:`station_patterns`)
-design rainfall (IFD)        **not** bundled -- supply BoM depths, or
-                             fit the record (:func:`station_ifd`)
+design rainfall (IFD)        a tidy CSV of BoM depths read with
+                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_csv`;
+                             a demonstration table is bundled per demo
+                             station (:func:`station_ifd`)
 ===========================  ==========================================
 
 :func:`run_dffa` wires all four together for a bundled demo station, which
@@ -35,8 +37,8 @@ from ..demo_data import catchment_data, demo_paths
 from ..design_storm import _pick_increment_file
 from ..gr4h.GR4H_model import GR4H
 from .engine import GR4HEventEngine
-from .ifd import DEFAULT_IFD_AEPS, IFDCurve, ifd_from_record
-from .mcs import STANDARD_DURATIONS_H, DerivedFFA, MCSConfig
+from .ifd import IFDCurve, ifd_table_from_csv
+from .mcs import DerivedFFA, MCSConfig
 from .patterns import TemporalPatternLibrary
 from .states import InitialStateSampler, PETClimatology
 from .stratification import Stratification
@@ -278,21 +280,26 @@ def station_patterns(station: str = "421026",
     return TemporalPatternLibrary.from_arr_increments_csv(increments_path)
 
 
-def station_ifd(station: str = "421026",
-                durations_h: Sequence[float] = STANDARD_DURATIONS_H,
-                aeps: Sequence[float] = DEFAULT_IFD_AEPS,
-                arf=None, **fit_kwargs) -> IFDCurve:
-    """Design rainfall curve fitted to a bundled station's rainfall record.
+def station_ifd(station: str = "421026", arf=None) -> IFDCurve:
+    """The bundled *demonstration* design rainfall table for a demo station.
 
-    A convenience for the demo only.  No design rainfalls are bundled with
-    the package, and a fit to six years of one pluviograph is not one: read
-    the warning on :func:`~pyfloodrisk.dffa.ifd.ifd_from_record` before
-    using the result for anything but a demonstration.
+    Design rainfalls enter the framework one way only -- a tidy CSV read by
+    :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_csv` -- and this reads the
+    demo table bundled for ``station`` so the example workflow has something
+    to run on.
+
+    **The bundled table is not a design IFD.**  It was fitted to the six-odd
+    years of the station's own pluviograph record, which is both biased and
+    imprecise and cannot support the rare end at all; the file says so in its
+    own header.  For anything you intend to report, extract BoM IFD depths
+    into a table of the same layout and read it with ``ifd_table_from_csv``.
     """
-    forcings = load_station_forcings(station)
-    table = ifd_from_record(forcings["prec"].to_numpy(float), durations_h,
-                            dt_hours=1.0, aeps=aeps, **fit_kwargs)
-    return IFDCurve(table, arf=arf)
+    path = demo_paths()["ifd"] / f"demo_ifd_{station}.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no bundled demo IFD table for station {station}; supply your "
+            "own depths with ifd_table_from_csv()")
+    return IFDCurve(ifd_table_from_csv(path), arf=arf)
 
 
 # ------------------------------------------------------------------ workflow
@@ -313,8 +320,8 @@ def run_dffa(
 
     Runs the whole chain: continuous GR4H over the station's climate record,
     the state distribution from that run, temporal patterns from the
-    station's increments file, design rainfalls fitted to the station's own
-    record, then the stratified Monte Carlo.
+    station's increments file, the bundled demonstration design rainfall
+    table, then the stratified Monte Carlo.
 
     Parameters
     ----------
@@ -329,8 +336,9 @@ def run_dffa(
         Storm durations to envelope over.  Fewer than the ARR standard set,
         because the demo should finish in a minute or two.
     ifd :
-        Design rainfall curve.  Defaults to :func:`station_ifd`, which is a
-        fit to the station's own record and **not** a design IFD.
+        Design rainfall curve.  Defaults to :func:`station_ifd`, the bundled
+        demonstration table, which is **not** a design IFD -- pass your own
+        (``IFDCurve(ifd_table_from_csv(path))``) for anything you report.
     stratification :
         Rainfall sampling scheme; defaults to 25 intervals x 60 simulations
         over 90% to 1 in 10^5 AEP.
@@ -361,7 +369,7 @@ def run_dffa(
 
     engine = GR4HEventEngine(params, area_km2=area, dt_hours=1.0)
     patterns = station_patterns(station)
-    curve = station_ifd(station, durations_h=durations_h) if ifd is None else ifd
+    curve = station_ifd(station) if ifd is None else ifd
     strat = stratification or Stratification.uniform_in_z(
         aep_max=0.9, aep_min=1e-5, n_strata=25, n_per_stratum=60)
 

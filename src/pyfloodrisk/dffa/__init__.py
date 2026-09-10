@@ -52,7 +52,7 @@ With your own data, assemble the four inputs yourself::
 """
 
 from .ifd import (ARR2019LongDurationARF, DEFAULT_IFD_AEPS, IFDCurve,
-                  ifd_from_record, ifd_table_from_csv, unit_arf)
+                  ifd_table_from_csv, unit_arf)
 from .patterns import (DEFAULT_AEP_BANDS, PreBurstSampler, TemporalPatternLibrary,
                        resample_increments)
 from .states import (UH_TOTAL, InitialStateSampler, PETClimatology,
@@ -68,7 +68,7 @@ from . import diagnostics, tpt
 
 __all__ = [
     "IFDCurve", "unit_arf", "ARR2019LongDurationARF", "ifd_table_from_csv",
-    "ifd_from_record", "DEFAULT_IFD_AEPS",
+    "DEFAULT_IFD_AEPS",
     "TemporalPatternLibrary", "PreBurstSampler", "resample_increments",
     "DEFAULT_AEP_BANDS",
     "InitialStateSampler", "PETClimatology", "UH_TOTAL", "have_pyvinecopulib",

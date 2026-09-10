@@ -15,11 +15,11 @@ import pytest
 
 from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, IFDCurve,
                               Stratification, continuous_state_table,
-                              event_onset_states, ifd_from_record,
-                              load_station_forcings,
+                              event_onset_states, load_station_forcings,
                               pet_climatology, run_dffa, state_sampler_from_run,
-                              station_patterns)
+                              station_ifd, station_patterns)
 from pyfloodrisk.dffa.ifd import _parse_aep, ifd_table_from_csv
+from pyfloodrisk.demo_data import demo_paths, list_demo_stations
 from pyfloodrisk.gr4h.GR4H_model import GR4H
 
 STATION = "421026"
@@ -186,29 +186,34 @@ def test_station_patterns_parse_into_bands_and_sum_to_one():
     assert frac.size == 6 and np.isclose(frac.sum(), 1.0)
 
 
-def test_record_based_ifd_is_monotone_and_ordered():
-    rng = np.random.default_rng(0)
-    n = 8 * 8766
-    prec = np.where(rng.random(n) < 0.1, rng.gamma(1.5, 2.0, n), 0.0)
-    table = ifd_from_record(prec, [1, 6, 24], dt_hours=1.0)
-    assert list(table.index) == [1.0, 6.0, 24.0]
-    # columns come back in the order asked for, i.e. AEP descending, so
-    # depth grows across them; and it grows down the durations too
+@pytest.mark.parametrize("station", list_demo_stations())
+def test_bundled_demo_ifd_table_is_well_formed(station):
+    """Every demo station ships an IFD table the framework can actually use.
+
+    Design rainfalls now enter one way only -- a CSV -- so the bundled demo
+    tables are the demo's single point of failure.
+    """
+    table = ifd_table_from_csv(demo_paths()["ifd"] / f"demo_ifd_{station}.csv")
     assert list(table.columns) == [0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
-    assert np.all(np.diff(table.to_numpy(), axis=1) > 0)
-    assert np.all(np.diff(table.to_numpy(), axis=0) > 0)
-    IFDCurve(table)                                        # accepted downstream
+    values = table.to_numpy(float)
+    assert np.isfinite(values).all()                    # the '#' header skipped
+    assert (values > 0).all()
+    # depth grows with rarity across the row, and with burst length down it
+    assert np.all(np.diff(values, axis=1) > 0)
+    assert np.all(np.diff(values, axis=0) >= 0)
+    IFDCurve(table)                                     # accepted downstream
 
 
-def test_record_based_ifd_rejects_a_short_record():
-    with pytest.raises(ValueError, match="years long"):
-        ifd_from_record(np.ones(100), [1], dt_hours=1.0)
+def test_station_ifd_reads_the_bundled_table():
+    curve = station_ifd(STATION)
+    assert isinstance(curve, IFDCurve)
+    # rarer burst, deeper burst -- at a duration the table does not carry
+    assert curve.depth(4.0, 0.01) > curve.depth(4.0, 0.5) > 0
 
 
-def test_record_based_ifd_rejects_a_sub_timestep_duration():
-    prec = np.ones(3 * 8766)
-    with pytest.raises(ValueError, match="shorter than"):
-        ifd_from_record(prec, [0.25], dt_hours=1.0)
+def test_station_ifd_rejects_an_unknown_station():
+    with pytest.raises(FileNotFoundError, match="no bundled demo IFD"):
+        station_ifd("not_a_station")
 
 
 def test_aep_labels_are_parsed_from_the_usual_notations():

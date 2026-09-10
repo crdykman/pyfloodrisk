@@ -11,7 +11,7 @@ empirically by the total probability theorem.
 
 ```
 pyfloodrisk/dffa/
-  ifd.py              IFD curve fitting/inversion, areal reduction, record fit
+  ifd.py              IFD curve fitting/inversion, CSV loader, areal reduction
   stratification.py   strata over the rainfall AEP domain, with weights
   patterns.py         ARR temporal pattern ensembles, pre-burst rainfall
   states.py           joint resampling of GR4H states, PET climatology
@@ -38,7 +38,7 @@ already produces:
 | event model | a calibrated parameter set through `GR4HEventEngine` — the same `pyfloodrisk.gr4h.GR4H` code the calibration uses |
 | initial state distribution | `continuous_state_table(forcings, params, area)`, a continuous GR4H run over the station's climate record |
 | temporal patterns | `station_patterns(station)`, the station's ARR Data Hub increments file — the same file `build_design_storm` reads |
-| design rainfall (IFD) | **not bundled.** Supply BoM depths via `ifd_table_from_csv`, or fit the record with `ifd_from_record` for a demonstration |
+| design rainfall (IFD) | **a CSV you supply.** BoM depths in a tidy table, read with `ifd_table_from_csv`. A *demonstration* table is bundled per demo station (`station_ifd`) so the example runs; it is not a design IFD |
 
 The state distribution is the input with no ARR equivalent, and the reason the
 model has to be the same on both sides: the event is *hot-started* from a state
@@ -73,9 +73,9 @@ res.to_csv("events.csv")
 ```
 
 `run_dffa(station=...)` does all of the above for a bundled demo station in one
-call. It is a demonstration, not a template: its design rainfalls are fitted to
-six years of one pluviograph, and its parameters are plausible rather than
-calibrated.
+call. It is a demonstration, not a template: its design rainfalls are the
+bundled demo table (fitted to six years of one pluviograph), and its parameters
+are plausible rather than calibrated.
 
 ## The estimator
 
@@ -203,44 +203,6 @@ hours and jittering a variable with a point mass at its boundary smears that
 mass out. `bootstrap` has no such problem, which is one more reason it is the
 default.
 
-### What the state-sampling choice is worth
-
-`examples/dffa_demo.py` ends with `compare_state_methods`: same rainfall
-sampling, same seed, one duration, four state samplers. On the synthetic
-catchment the framework was developed against (1080 events per method, so the
-rarest rows carry ±8% Monte Carlo noise — read the frequent rows):
-
-| AEP | bootstrap | smoothed | empirical_copula | independent_kde |
-|---|---|---|---|---|
-| 10% | 1.00 | 1.03 | 0.91 | 0.77 |
-| 5% | 1.00 | 1.03 | 0.90 | 0.72 |
-| 2% | 1.00 | 1.00 | 0.88 | 0.79 |
-| 1% | 1.00 | 1.00 | 0.91 | 0.85 |
-
-Two things worth taking from that. First, **destroying the cross-correlation
-costs 15–25% of the design flood** while leaving every marginal intact — that
-is the size of the effect your state distribution is capturing, and it is the
-number to quote when someone asks why the joint distribution matters rather
-than marginal soil-moisture percentiles.
-
-Second, and less comfortable: the empirical copula reproduces Kendall's tau
-almost exactly (0.562 vs 0.568, 0.884 vs 0.924, 0.550 vs 0.563) and still sits
-~9% below bootstrap. Swapping KDE margins for empirical margins recovers ~2
-points and the UH profile treatment accounts for none of it, so the residual is
-the dependence structure itself: a three-dimensional TLL vine matches the rank
-correlation but still smooths the joint upper corner, and a vine imposes
-conditional independence beyond its first tree. **Matching rank correlation is
-not sufficient** when the design flood comes from the joint upper tail. Keep
-`bootstrap` as the production default and treat the copula as the tool for
-asking what-if questions about dependence. Re-run the comparison on your own
-catchment before quoting either number of it.
-
-Cost: 11 durations × (50 intervals + 2 open ends) × 200 simulations is ~114,000
-GR4H event runs. Each is a few hundred timesteps through the numba core, so
-that is a couple of minutes single-threaded and there is no parallel machinery
-to configure. Check the `convergence` diagnostic before assuming you need 200
-per stratum.
-
 ## Things to verify before trusting output
 
 These are the places where the code is doing something you should confirm
@@ -261,13 +223,14 @@ different `x4` is silently zero-padded or truncated to the engine's UH length.
 plug a different model in behind your own `EventModel` subclass, write the
 equivalent test for it first.
 
-**Design rainfalls.** Nothing in the package is a design IFD.
-`ifd_from_record` fits a log-normal curve to the annual exceedance series of a
-rainfall record, which is useful for asking how far the design rainfalls sit
-from the ones your own gauge implies, and is not a substitute for them: ARR
-design rainfalls are regionalised from the whole gauge network and extend to
-AEPs no single record can support. Extract BoM depths into a tidy table and
-read them with `ifd_table_from_csv`.
+**Design rainfalls.** Nothing in the package is a design IFD. They enter one
+way only — a tidy CSV read with `ifd_table_from_csv`, so the depths you run on
+are depths you put there. The tables under `pyfloodrisk/data/ifd/` that
+`station_ifd` reads exist so the demo has something to run on: each was fitted
+to six-odd years of that station's own pluviograph, and says so in its header.
+That is not a substitute for design rainfall — ARR depths are regionalised from
+the whole gauge network and extend to AEPs no single record can support — so
+extract BoM depths into a table of the same layout before reporting anything.
 
 **Areal reduction.** `ARR2019LongDurationARF` implements the *functional form*
 of the ARR long-duration ARF equation; the nine region-specific coefficients

@@ -4,9 +4,10 @@ Derived flood frequency analysis, end to end on a bundled demo station.
 Every input comes from the package: the climate record drives the
 continuous GR4H run that the antecedent states are drawn from, the
 temporal patterns come from the station's ARR Data Hub increments file,
-and the design rainfalls are *fitted to the station's own record* --
-which is the one input you must replace with real IFD depths before
-reading anything into the numbers (see ``docs/dffa.md``).
+and the design rainfalls come from the bundled *demonstration* IFD table
+-- which is the one input you must replace with real BoM IFD depths
+(``ifd_table_from_csv``) before reading anything into the numbers (see
+``docs/dffa.md``).
 
 Run:  python examples/dffa_demo.py
 """
@@ -39,9 +40,10 @@ def main():
                                          warmup_hours=8760, thin=6)
     states = state_sampler_from_run(state_table, params, method="bootstrap")
 
-    # 2. rainfall: patterns from the station's ARR file, IFD from its record
+    # 2. rainfall: patterns from the station's ARR file, IFD from the bundled
+    #    demonstration table (replace with BoM depths via ifd_table_from_csv)
     patterns = station_patterns(STATION)
-    ifd = station_ifd(STATION, durations_h=DURATIONS_H)
+    ifd = station_ifd(STATION)
 
     # 3. the event model: the same GR4H, hot-started from a sampled state
     engine = GR4HEventEngine(params, area_km2=area, dt_hours=1.0)
