@@ -4,10 +4,15 @@ Derived flood frequency analysis, end to end on a bundled demo station.
 Every input comes from the package: the climate record drives the
 continuous GR4H run that the antecedent states are drawn from, the
 temporal patterns come from the station's ARR Data Hub increments file,
-and the design rainfalls come from the bundled *demonstration* IFD table
--- which is the one input you must replace with real BoM IFD depths
-(``ifd_table_from_csv``) before reading anything into the numbers (see
-``docs/dffa.md``).
+and the design rainfalls come from the station's bundled BoM IFD
+download, reduced from point to catchment-average depths by the ARR 2019
+areal reduction factor for the station's region.  The parameters, though,
+are plausible rather than calibrated, and the ARF region is a map lookup
+worth confirming -- see ``docs/dffa.md`` before reading anything into the
+numbers.
+
+Durations of 12 h and up use areal temporal patterns; 6 h uses point
+patterns, because ARR publishes no areal pattern that short.
 
 Run:  python examples/dffa_demo.py
 """
@@ -25,8 +30,8 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, MCSConfig,
                               station_ifd, station_patterns)
 from pyfloodrisk.demo_data import catchment_data
 
-STATION = "421026"
-DURATIONS_H = [3, 6, 12, 24, 48, 72]
+STATION = "117002A"
+DURATIONS_H = [6, 12, 24, 48, 72]
 AEPS = [0.1, 0.05, 0.02, 0.01, 0.005, 0.002]
 
 
@@ -40,8 +45,8 @@ def main():
                                          warmup_hours=8760, thin=6)
     states = state_sampler_from_run(state_table, params, method="bootstrap")
 
-    # 2. rainfall: patterns from the station's ARR file, IFD from the bundled
-    #    demonstration table (replace with BoM depths via ifd_table_from_csv)
+    # 2. rainfall: areal patterns (nearest standard area) from 12 h up,
+    #    point patterns below that, and the station's BoM IFD download
     patterns = station_patterns(STATION)
     ifd = station_ifd(STATION)
 

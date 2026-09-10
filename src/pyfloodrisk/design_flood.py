@@ -95,7 +95,7 @@ def simulate_design_flood(
     return sim_matrix
 
 
-def run_demo_workflow(station: str = "421026", robust: bool = False) -> dict[str, Any]:
+def run_demo_workflow(station: str = "117002A", robust: bool = False) -> dict[str, Any]:
     """Run the bundled demo workflow end-to-end.
 
     Calibrates GR4H against the bundled climate data, optionally narrows
@@ -106,7 +106,7 @@ def run_demo_workflow(station: str = "421026", robust: bool = False) -> dict[str
     Parameters
     ----------
     station:
-        Station id.  Defaults to the fully worked example ``421026``.
+        Station id.  Defaults to the fully worked example ``117002A``.
     robust:
         If True, narrow the behavioural posterior using
         :func:`~pyfloodrisk.robust_calibration` against the bundled
@@ -126,10 +126,14 @@ def run_demo_workflow(station: str = "421026", robust: bool = False) -> dict[str
     posterior = behavioural_posterior(results, Cb=0, n=10)
     if robust:
         storms_dir = demo_paths()["storms"]
-        tps = []
-        for tpi in range(1, 11):
-            tp = pd.read_csv(storms_dir / f"421026_1in2000_12hr_tp{tpi:02d}.csv")
-            tps.append(tp)
+        paths = sorted(storms_dir.glob("*_1in2000_12hr_tp*.csv"))
+        if not paths:
+            raise FileNotFoundError(
+                f"robust=True needs bundled design storm events in {storms_dir}, "
+                "and none are bundled for the current demo stations. Build them "
+                "with build_design_storm() and pass them to robust_calibration() "
+                "yourself, or run with robust=False.")
+        tps = [pd.read_csv(p) for p in paths]
         events = {"12hr": {"2000": tps}}
         posterior = robust_calibration(posterior, area, events, topn=5)
 

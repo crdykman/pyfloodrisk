@@ -48,7 +48,7 @@ Design flood ensemble for one design storm:
 ```python
 from pyfloodrisk import run_demo_workflow
 
-results = run_demo_workflow(station="421026")
+results = run_demo_workflow(station="117002A")
 ```
 
 Derived flood frequency curve across the whole probability domain:
@@ -56,15 +56,16 @@ Derived flood frequency curve across the whole probability domain:
 ```python
 from pyfloodrisk import run_dffa
 
-out = run_dffa(station="421026")
+out = run_dffa(station="117002A")
 print(out["results"].summary())
 ```
 
-`run_dffa` is a demonstration — its design rainfalls come from a bundled
-demo table fitted to the station's own six-year record, not from BoM IFD
-depths, and its parameters are plausible rather than calibrated. Supply
-your own depths with `ifd_table_from_csv`, which is the only way design
-rainfalls enter. [docs/dffa.md](docs/dffa.md) sets out what to replace
+`run_dffa` is a demonstration — its design rainfalls are the station's
+bundled BoM IFD download, areally reduced with `ARR2019ARF`, and
+its parameters are plausible rather than calibrated. Design rainfalls
+enter one way only, from a CSV: `ifd_table_from_bom_csv` for a Bureau
+download as-issued, `ifd_table_from_csv` for a table you have tidied
+yourself. [docs/dffa.md](docs/dffa.md) sets out what to replace
 before the numbers mean anything, and `examples/dffa_demo.py` builds the
 same analysis input by input.
 

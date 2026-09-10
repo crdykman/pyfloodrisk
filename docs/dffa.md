@@ -37,8 +37,14 @@ already produces:
 |---|---|
 | event model | a calibrated parameter set through `GR4HEventEngine` — the same `pyfloodrisk.gr4h.GR4H` code the calibration uses |
 | initial state distribution | `continuous_state_table(forcings, params, area)`, a continuous GR4H run over the station's climate record |
-| temporal patterns | `station_patterns(station)`, the station's ARR Data Hub increments file — the same file `build_design_storm` reads |
-| design rainfall (IFD) | **a CSV you supply.** BoM depths in a tidy table, read with `ifd_table_from_csv`. A *demonstration* table is bundled per demo station (`station_ifd`) so the example runs; it is not a design IFD |
+| temporal patterns | `station_patterns(station)`, the station region's ARR Data Hub increments files. **Areal** patterns (keyed by catchment area, not AEP band) from 12 h to 168 h, **point** patterns at 6 and 9 h, because ARR publishes no areal pattern shorter than 12 h |
+| design rainfall (IFD) | **a CSV.** `ifd_table_from_bom_csv` for a Bureau download as-issued, `ifd_table_from_csv` for a table you have tidied. `station_ifd(station)` reads the bundled download for a demo station and applies the region's `ARR2019ARF` |
+
+The two bundled demo stations are **117002A** (Black River at Bruce Highway,
+QLD, 255 km², Wet Tropics patterns) and **405214** (Delatite River at Tonga
+Bridge, VIC, 357 km², Murray Basin patterns). Each ships an hourly climate
+record, a BoM IFD download, and its region's temporal patterns in both forms —
+`data/tps/<region>` for point, `data/tps/Areal_<region>` for areal.
 
 The state distribution is the input with no ARR equivalent, and the reason the
 model has to be the same on both sides: the event is *hot-started* from a state
@@ -49,7 +55,7 @@ length must be the ones that produced the table.
 from pyfloodrisk.dffa import (DerivedFFA, GR4HEventEngine, IFDCurve, MCSConfig,
                               STANDARD_DURATIONS_H, Stratification,
                               TemporalPatternLibrary, continuous_state_table,
-                              ifd_table_from_csv, pet_climatology,
+                              ifd_table_from_bom_csv, pet_climatology,
                               state_sampler_from_run, diagnostics)
 
 params = {"x1": X1, "x2": X2, "x3": X3, "x4": X4}     # from calibration()
@@ -58,8 +64,9 @@ table  = continuous_state_table(forcings, params, AREA, warmup_hours=8760, thin=
 states = state_sampler_from_run(table, params, method="bootstrap")
 engine = GR4HEventEngine(params, area_km2=AREA)
 
-ifd = IFDCurve(ifd_table_from_csv("bom_ifd.csv"), arf=my_arf)
-tp  = TemporalPatternLibrary.from_arr_increments_csv("ARR_Point_Increments.csv")
+ifd = IFDCurve(ifd_table_from_bom_csv("bom_ifd_download.csv"), arf=my_arf)
+tp  = TemporalPatternLibrary.from_arr_increments_csv("ARR_Areal_Increments.csv",
+                                                    area_km2=AREA)
 
 strat = Stratification.uniform_in_z(aep_max=0.9, aep_min=1e-6,   # see below
                                     n_strata=50, n_per_stratum=200)
@@ -74,8 +81,8 @@ res.to_csv("events.csv")
 
 `run_dffa(station=...)` does all of the above for a bundled demo station in one
 call. It is a demonstration, not a template: its design rainfalls are the
-bundled demo table (fitted to six years of one pluviograph), and its parameters
-are plausible rather than calibrated.
+bundled BoM IFD download, reduced to a catchment average by the region's ARR
+2019 ARF, and its parameters are plausible rather than calibrated.
 
 ## The estimator
 
@@ -174,9 +181,9 @@ performs for the single-event workflow, so the two paths condition on the same
 thing. Delineation finds every rise, most of which are not floods, so the
 events are then trimmed to an exceedance-per-year rate — by default the 6
 largest per year of record (`ey=6`), ranked on peak flow or on event volume
-(`rank_by="peak"` or `"volume"`); `ey=None` keeps the lot. On the bundled demo
-station that is the difference between 220 rises and 33 events, and it roughly
-doubles the median antecedent production store (73 → 142 mm), which is the
+(`rank_by="peak"` or `"volume"`); `ey=None` keeps the lot. On 117002A that is
+the difference between 338 rises (37/yr) and 54 events (6/yr), and it nearly
+doubles the median antecedent production store (100 → 189 mm), which is the
 whole point: big events start on wet catchments. It is a far smaller pool (one
 row per event rather than per hour), so it is the case where the smoothed and
 copula methods earn their keep. Conditioning
@@ -202,12 +209,12 @@ would produce states GR4H could never reach.
 `InitialStateSampler.dependence(sampled)` reports Kendall's tau between state
 variables for the input and the sample — **run it before trusting any
 non-bootstrap method**, because it says whether the dependence you meant to
-preserve (or destroy) actually was. It earns its keep immediately on the
-bundled demo station: `smoothed` reproduces the tau between the two stores
-(0.710 against 0.712) but collapses the tau between each store and `uh_total`
-(0.19 against 0.79), because in a dry catchment `uh_total` is zero for most
-hours and jittering a variable with a point mass at its boundary smears that
-mass out. `bootstrap` has no such problem, which is one more reason it is the
+preserve (or destroy) actually was. It earns its keep immediately on 117002A:
+`smoothed` reproduces the tau between the two stores (0.777 against 0.787) but
+collapses the tau between each store and `uh_total` (0.26 against 0.89, and
+0.28 against 0.71), because `uh_total` is zero for most hours and jittering a
+variable with a point mass at its boundary smears that mass out. `bootstrap`
+reproduces all three to within 0.005, which is one more reason it is the
 default.
 
 ## Things to verify before trusting output
@@ -230,28 +237,76 @@ different `x4` is silently zero-padded or truncated to the engine's UH length.
 plug a different model in behind your own `EventModel` subclass, write the
 equivalent test for it first.
 
-**Design rainfalls.** Nothing in the package is a design IFD. They enter one
-way only — a tidy CSV read with `ifd_table_from_csv`, so the depths you run on
-are depths you put there. The tables under `pyfloodrisk/data/ifd/` that
-`station_ifd` reads exist so the demo has something to run on: each was fitted
-to six-odd years of that station's own pluviograph, and says so in its header.
-That is not a substitute for design rainfall — ARR depths are regionalised from
-the whole gauge network and extend to AEPs no single record can support — so
-extract BoM depths into a table of the same layout before reporting anything.
+**Design rainfalls.** They enter one way only — a CSV, so the depths you run
+on are depths you put there. `ifd_table_from_bom_csv` reads a Bureau IFD
+download as-issued (it skips the metadata preamble and takes durations from
+the `Duration in min` column); `ifd_table_from_csv` reads a table you have
+tidied yourself. The bundled downloads under `pyfloodrisk/data/ifd/` are real
+BoM depths for the grid cell nearest each demo gauge, tabulated 63.2%–1% AEP
+over 1–168 h. Two things to watch: they are **point** depths, so pass an `arf`
+if the catchment is big enough to matter (both demo catchments, at 255 and
+357 km², are), and anything rarer than 1% AEP is *extrapolated* by `IFDCurve`
+— add ARR's rare design rainfalls as extra columns if you report out there.
 
-**Areal reduction.** `ARR2019LongDurationARF` implements the *functional form*
-of the ARR long-duration ARF equation; the nine region-specific coefficients
-are not bundled and you must supply them from ARR Book 2, Chapter 4. The form
-has one useful internal check: at 50% AEP the two AEP-dependent terms vanish.
-There is also a separate short-duration equation in ARR that is not implemented
-here. Without an `arf`, depths are point depths.
+**Areal reduction.** `ARR2019ARF` implements the whole ARR Book 2 Chapter 4
+method — the long-duration equation with the ten regions' coefficients bundled
+(`ARF_REGIONS`), the Australia-wide short-duration equation, linear
+interpolation between the 12 h and 24 h values, and the 1–10 km² scaling —
+and `station_ifd` applies it by default for the station's region. On the demo
+catchments it takes roughly 7% off a 24 h 1% AEP depth and 11–13% off a 12 h
+one, and about 14% off the 1% AEP peak.
+
+Three things to check. **The region is a map lookup**, not a formula on the
+coordinates: `DEMO_ARF_REGIONS` records `East Coast North` for 117002A and
+`Southern Temperate` for 405214, read off the ARR map by eye, and a wrong
+region rescales every depth. **AEP is clamped, not extrapolated**, to ARR's
+stated 0.0005–0.5 — a derived-FFA run samples to 1e-5 and 0.9, so the ARF is
+held flat beyond the range the equations were fitted over. **The
+short-duration equation stops at 1000 km²**; that is enforced for bursts of
+12 h and under, but inside the 12–24 h interpolation band it is still
+evaluated at 12 h for larger catchments, because the interpolation rule needs
+it. `ARR2019LongDurationARF` remains for supplying your own coefficients to
+the long-duration form alone. Pass `arf=unit_arf` to work in point depths.
 
 **ARR temporal pattern file layout.** The loader expects `EventID, Duration,
-TimeStep, Region, AEP` followed by the increment columns, with `AEP` holding the
-band name — which is the layout of the files bundled with the package. The Data
-Hub layout has changed between releases; parse one duration and check the
+TimeStep, Region, <key>, Increments` followed by the increment columns. The
+`<key>` column is either `AEP`, holding the band name (a *point* download), or
+`Area`, holding the standard catchment area in km² (an *areal* download). The
+Data Hub layout has changed between releases; parse one duration and check the
 increments sum to 100 before running anything (`test_dffa_workflow.py` does
-this for the bundled files).
+this for the bundled files). Note the rows are longer than the header — one
+`Increments` column name covers all of them — so a plain `read_csv` keeps only
+the first increment and silently drops rows.
+
+**Two kinds of pattern in one library.** `station_patterns` combines them,
+because ARR publishes no single set spanning the durations this framework
+needs:
+
+| durations | kind | keyed by |
+|---|---|---|
+| 6, 9 h | point | AEP band — each band gets its own ensemble |
+| 12–168 h | areal | standard catchment area — one ensemble serves every band |
+
+Areal patterns are published per standard area (100, 200, 500, … km²), and
+`station_patterns` picks the nearest to the catchment — 200 km² for 117002A's
+255 km², 500 km² for 405214's 357 km². They carry no AEP dependence at all, so
+that single ensemble is served to every band; the source data draws no
+distinction. 12 h exists in both files and the areal one wins, being the right
+kind for a catchment rather than a gauge. `point_durations_h=()` gives an
+areal-only library.
+
+**The mix is a compromise worth declaring.** Below 12 h the burst *shape* is a
+gauge's, not a 255–357 km² catchment's, so its within-burst variability is not
+damped the way an areal pattern's is — that biases short-duration peaks
+upward. The ARF still reduces the *depth* at every duration; it is only the
+shape that is a point shape. Whether that matters depends on whether the short
+durations are anywhere near critical, which is worth checking directly:
+`DFFAResults.summary()` reports the critical duration at each AEP, and on
+117002A no AEP picks 6 h (48 h dominates, 12 h at the rarest), so the point
+patterns are not driving the answer there. **If your envelope keeps choosing
+the shortest duration you have, the real critical duration is probably shorter
+still** — extend `point_durations_h` down (the point files go to 10 minutes)
+rather than trusting the boundary value.
 
 **AEP band boundaries.** `DEFAULT_AEP_BANDS` groups frequent (50%–20%),
 intermediate (10%–2%) and rare (1% and rarer). Confirm against the header of

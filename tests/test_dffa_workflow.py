@@ -18,13 +18,19 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, IFDCurve,
                               event_onset_states, load_station_forcings,
                               pet_climatology, run_dffa, state_sampler_from_run,
                               station_ifd, station_patterns)
-from pyfloodrisk.dffa.ifd import _parse_aep, ifd_table_from_csv
-from pyfloodrisk.demo_data import demo_paths, list_demo_stations
+from pyfloodrisk.dffa.ifd import (ARF_REGIONS, ARR2019ARF, _parse_aep,
+                                  ifd_table_from_bom_csv, unit_arf,
+                                  ifd_table_from_csv)
+from pyfloodrisk.demo_data import (AREAL_TP_DURATIONS_H, DEMO_ARF_REGIONS,
+                                   POINT_TP_DURATIONS_H, TP_DURATIONS_H,
+                                   catchment_data, station_arf_region,
+                                   demo_paths, station_tp_region,
+                                   list_demo_stations)
 from pyfloodrisk.gr4h.GR4H_model import GR4H
 
-STATION = "421026"
+STATION = "117002A"
 PARAMS = DEMO_PARAMETERS[STATION]
-AREA = 149.689
+AREA = catchment_data(STATION)
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +46,8 @@ def state_table(forcings):
 
 # --------------------------------------------------------------- forcings
 def test_station_forcings_are_hourly_and_complete(forcings):
-    assert list(forcings.columns) == ["pet", "prec", "qt"]
+    # matched by name, not order: the bundled files disagree on order
+    assert {"pet", "prec", "qt"} <= set(forcings.columns)
     assert forcings.index.is_monotonic_increasing
     gaps = forcings.index.to_series().diff().dropna().unique()
     assert list(gaps) == [pd.Timedelta(hours=1)]
@@ -172,36 +179,133 @@ def test_pet_climatology_is_a_seasonal_cycle(forcings):
 
 
 # ------------------------------------------------------------ rainfall inputs
-def test_station_patterns_parse_into_bands_and_sum_to_one():
-    """ARR increments are percentages of the burst; check one duration by hand."""
-    lib = station_patterns(STATION)
-    bands = {band for _, band in lib.patterns}
-    assert bands == {"frequent", "intermediate", "rare"}
-    assert 360 in lib.durations_min                     # 6 h
-    entry = lib.patterns[(360, "rare")]
+@pytest.mark.parametrize("station", list_demo_stations())
+def test_station_patterns_parse_and_sum_to_one(station):
+    """ARR increments are percentages of the burst; check one duration by hand.
+
+    The bundled patterns are areal, so every increment row is a full storm
+    whose increments sum to 100%.  Reading these files naively drops all but
+    the first increment, which this would catch.
+    """
+    lib = station_patterns(station)
+    assert 1440 in lib.durations_min                    # 24 h
+    entry = lib.patterns[(1440, "rare")]
     assert np.allclose(entry["increments"].sum(axis=1), 100.0, atol=0.6)
+    # the increments must span the burst: the file's timestep varies with
+    # duration (30 min at 12 h, up to 180 min at 72 h and beyond), so this
+    # is what catches increments being dropped on read
+    for (dur_min, _), e in lib.patterns.items():
+        assert e["increments"].shape[1] * e["timestep_min"] == dur_min
     # aggregated to the model timestep the fractions still sum to one
-    frac, _, band, _ = lib.sample(6.0, 0.005, 1.0, np.random.default_rng(0))
+    frac, _, band, _ = lib.sample(24.0, 0.005, 1.0, np.random.default_rng(0))
     assert band == "rare"
-    assert frac.size == 6 and np.isclose(frac.sum(), 1.0)
+    assert frac.size == 24 and np.isclose(frac.sum(), 1.0)
 
 
 @pytest.mark.parametrize("station", list_demo_stations())
-def test_bundled_demo_ifd_table_is_well_formed(station):
-    """Every demo station ships an IFD table the framework can actually use.
+def test_patterns_span_point_and_areal_durations(station):
+    """Point patterns below 12 h, areal from 12 h up, in one library."""
+    lib = station_patterns(station)
+    assert [d // 60 for d in lib.durations_min] == list(TP_DURATIONS_H)
+    assert min(lib.durations_min) == 360                 # 6 h, from the point file
 
-    Design rainfalls now enter one way only -- a CSV -- so the bundled demo
-    tables are the demo's single point of failure.
+
+@pytest.mark.parametrize("station", list_demo_stations())
+def test_short_durations_come_from_the_point_patterns(station):
+    """Below 12 h the ensembles must vary by AEP band, as point patterns do.
+
+    If the areal file were used here every band would share one ensemble,
+    which is the tell that the wrong file was read.
     """
-    table = ifd_table_from_csv(demo_paths()["ifd"] / f"demo_ifd_{station}.csv")
-    assert list(table.columns) == [0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
+    lib = station_patterns(station)
+    for duration_h in POINT_TP_DURATIONS_H:
+        entries = [lib.patterns[(duration_h * 60, band)]
+                   for band in ("frequent", "intermediate", "rare")]
+        assert not np.array_equal(entries[0]["increments"],
+                                  entries[-1]["increments"]), duration_h
+
+
+def test_point_durations_must_be_shorter_than_the_areal_crossover():
+    with pytest.raises(ValueError, match="must be shorter than"):
+        station_patterns(STATION, point_durations_h=(6, 24))
+
+
+def test_areal_only_library_is_still_available():
+    lib = station_patterns(STATION, point_durations_h=())
+    assert [d // 60 for d in lib.durations_min] == list(AREAL_TP_DURATIONS_H)
+
+
+def test_areal_patterns_pick_the_nearest_standard_area():
+    """Areal ensembles are published per area; the catchment picks one."""
+    assert station_patterns("117002A").areal_area_km2 == 200.0   # 255.2 km2
+    assert station_patterns("405214").areal_area_km2 == 500.0    # 357.4 km2
+
+
+def test_areal_patterns_serve_every_aep_band():
+    """Areal patterns carry no AEP dependence, so one ensemble serves all."""
+    lib = station_patterns(STATION)
+    assert {band for _, band in lib.patterns} == {"frequent", "intermediate",
+                                                 "rare"}
+    frequent = lib.patterns[(1440, "frequent")]["increments"]
+    rare = lib.patterns[(1440, "rare")]["increments"]
+    assert np.array_equal(frequent, rare)
+
+
+def test_areal_patterns_need_an_area():
+    from pyfloodrisk.dffa.patterns import TemporalPatternLibrary
+    region = station_tp_region(STATION)
+    path = demo_paths()["tps"] / f"Areal_{region}" / f"Areal_{region}_Increments.csv"
+    with pytest.raises(ValueError, match="areal increments file"):
+        TemporalPatternLibrary.from_arr_increments_csv(path)
+
+
+def test_point_patterns_do_not_need_an_area():
+    """A point file keys on AEP band, so no area is required to read it."""
+    from pyfloodrisk.dffa.patterns import TemporalPatternLibrary
+    region = station_tp_region(STATION)
+    path = demo_paths()["tps"] / region / f"{region}_Increments.csv"
+    lib = TemporalPatternLibrary.from_arr_increments_csv(path)
+    assert lib.areal_area_km2 is None
+    assert 360 in lib.durations_min                      # 6 h
+    assert {band for _, band in lib.patterns} == {"frequent", "intermediate",
+                                                  "rare"}
+
+
+@pytest.mark.parametrize("station", list_demo_stations())
+def test_bundled_bom_ifd_table_is_well_formed(station):
+    """Every demo station ships a BoM IFD download the framework can use.
+
+    Design rainfalls enter one way only -- a CSV -- so these files are the
+    demo's single point of failure.
+    """
+    table = ifd_table_from_bom_csv(demo_paths()["ifd"] / f"{station}_ifds.csv")
+    assert list(table.columns) == [0.632, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
+    assert list(table.index[:3]) == [1.0, 1.5, 2.0]     # hours, from minutes
+    assert table.index[-1] == 168.0
     values = table.to_numpy(float)
-    assert np.isfinite(values).all()                    # the '#' header skipped
+    assert np.isfinite(values).all()             # the metadata preamble skipped
     assert (values > 0).all()
-    # depth grows with rarity across the row, and with burst length down it
+    # depth grows with rarity across the row, and does not fall with burst
+    # length down it -- not strictly, because BoM rounds to three significant
+    # figures, which ties 405214's 144 h and 168 h depths at 5% and 1% AEP
     assert np.all(np.diff(values, axis=1) > 0)
     assert np.all(np.diff(values, axis=0) >= 0)
     IFDCurve(table)                                     # accepted downstream
+
+
+def test_bom_ifd_depths_match_the_file():
+    """Spot-check against the raw download, so a mis-parse cannot pass."""
+    table = ifd_table_from_bom_csv(demo_paths()["ifd"] / "117002A_ifds.csv")
+    assert table.loc[1.0, 0.632] == pytest.approx(40.4)
+    assert table.loc[24.0, 0.01] == pytest.approx(486.0)
+    assert table.loc[168.0, 0.5] == pytest.approx(287.0)
+
+
+def test_bom_reader_rejects_a_tidy_table(tmp_path):
+    path = tmp_path / "tidy.csv"
+    path.write_text("duration_h,0.5,0.01\n1,22.1,54.8\n")
+    with pytest.raises(ValueError, match="does not look like a BoM IFD"):
+        ifd_table_from_bom_csv(path)
 
 
 def test_station_ifd_reads_the_bundled_table():
@@ -211,8 +315,35 @@ def test_station_ifd_reads_the_bundled_table():
     assert curve.depth(4.0, 0.01) > curve.depth(4.0, 0.5) > 0
 
 
+@pytest.mark.parametrize("station", list_demo_stations())
+def test_station_ifd_applies_the_regional_arf_by_default(station):
+    """The bundled depths are point depths; a catchment average is smaller.
+
+    Without this the demo would silently run on unreduced point rainfall
+    over a 255-357 km2 catchment.
+    """
+    area = catchment_data(station)
+    reduced = station_ifd(station)
+    point = station_ifd(station, arf=unit_arf)
+    assert isinstance(reduced.arf, ARR2019ARF)
+    assert reduced.arf.region == station_arf_region(station)
+    for duration_h in (12.0, 24.0, 72.0):
+        r = float(reduced.depth(duration_h, 0.01, area_km2=area))
+        p = float(point.depth(duration_h, 0.01, area_km2=area))
+        assert 0.5 * p < r < p, (station, duration_h)
+    # asking for no area at all leaves the point depth untouched
+    assert float(reduced.depth(24.0, 0.01)) == pytest.approx(
+        float(point.depth(24.0, 0.01)))
+
+
+def test_every_demo_station_has_a_valid_arf_region():
+    assert set(DEMO_ARF_REGIONS) == set(list_demo_stations())
+    for station, region in DEMO_ARF_REGIONS.items():
+        assert region in ARF_REGIONS, (station, region)
+
+
 def test_station_ifd_rejects_an_unknown_station():
-    with pytest.raises(FileNotFoundError, match="no bundled demo IFD"):
+    with pytest.raises(FileNotFoundError, match="no bundled IFD table"):
         station_ifd("not_a_station")
 
 
@@ -239,13 +370,13 @@ def test_ifd_table_from_csv_roundtrips(tmp_path):
 # ------------------------------------------------------------------ workflow
 def test_run_dffa_end_to_end():
     """The whole chain, on the smallest experiment that still means anything."""
-    out = run_dffa(station=STATION, durations_h=(6, 24),
+    out = run_dffa(station=STATION, durations_h=(12, 24),
                    stratification=Stratification.uniform_in_z(
                        aep_max=0.9, aep_min=1e-4, n_strata=6, n_per_stratum=8,
                        n_per_end=8),
                    thin=48, progress=False)
     res = out["results"]
-    assert set(res.durations) == {6.0, 24.0}
+    assert set(res.durations) == {12.0, 24.0}
     assert len(res.events) == 2 * 8 * 8            # 6 strata + 2 open ends
     assert (res.events["q_peak"] > 0).all()
     assert np.isclose(res.events.groupby("duration_h")["weight"].sum(), 1.0).all()
@@ -253,7 +384,7 @@ def test_run_dffa_end_to_end():
     aeps = [0.1, 0.01]
     env = res.envelope(aeps)
     assert np.all(np.diff(env["q_peak"].to_numpy()) > 0)   # rarer is bigger
-    assert set(env["critical_duration_h"]) <= {6.0, 24.0}
+    assert set(env["critical_duration_h"]) <= {12.0, 24.0}
     # the state distribution the events were started from is the run's own
     assert out["state_table"]["prod_store"].max() <= out["parameters"]["x1"]
     assert isinstance(out["engine"], GR4HEventEngine)

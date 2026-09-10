@@ -13,10 +13,14 @@ initial state distribution   a continuous GR4H run over the station's
                              climate record (:func:`continuous_state_table`)
 temporal patterns            the station's ARR Data Hub increments file
                              (:func:`station_patterns`)
-design rainfall (IFD)        a tidy CSV of BoM depths read with
-                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_csv`;
-                             a demonstration table is bundled per demo
-                             station (:func:`station_ifd`)
+design rainfall (IFD)        a CSV of BoM depths -- a Bureau download
+                             as-issued through
+                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_bom_csv`,
+                             or a tidied table through
+                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_csv`.
+                             One download is bundled per demo station, and
+                             :func:`station_ifd` reads it and applies the
+                             region's ARR 2019 areal reduction factor.
 ===========================  ==========================================
 
 :func:`run_dffa` wires all four together for a bundled demo station, which
@@ -33,11 +37,13 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from ..demo_data import catchment_data, demo_paths
+from ..demo_data import (AREAL_TP_FROM_H, POINT_TP_DURATIONS_H, _parse_dates,
+                         catchment_data, demo_paths, station_arf_region,
+                         station_tp_region)
 from ..design_storm import _pick_increment_file
 from ..gr4h.GR4H_model import GR4H
 from .engine import GR4HEventEngine
-from .ifd import IFDCurve, ifd_table_from_csv
+from .ifd import ARR2019ARF, IFDCurve, ifd_table_from_bom_csv
 from .mcs import DerivedFFA, MCSConfig
 from .patterns import TemporalPatternLibrary
 from .states import InitialStateSampler, PETClimatology
@@ -55,31 +61,34 @@ __all__ = [
     "DEMO_PARAMETERS",
 ]
 
+#: The demo station used when none is named.
+DEMO_STATION = "117002A"
+
 #: Plausible-but-uncalibrated GR4H parameters, so the demo runs without a
 #: calibration step.  Calibrate before reading anything into the numbers.
 DEMO_PARAMETERS: dict[str, dict[str, float]] = {
-    "421026": {"ps0": 0.5, "rs0": 0.5, "x1": 350.0, "x2": -0.8,
-               "x3": 60.0, "x4": 6.0},
-    "418005": {"ps0": 0.5, "rs0": 0.5, "x1": 400.0, "x2": -1.0,
-               "x3": 55.0, "x4": 9.0},
+    "117002A": {"ps0": 0.5, "rs0": 0.5, "x1": 350.0, "x2": -0.8,
+                "x3": 60.0, "x4": 6.0},
+    "405214": {"ps0": 0.5, "rs0": 0.5, "x1": 1469.93, "x2": -8.48264,
+               "x3": 210.0908, "x4": 16.6404},
 }
 
 
 # --------------------------------------------------------------- forcings
-def load_station_forcings(station: str = "421026") -> pd.DataFrame:
+def load_station_forcings(station: str = DEMO_STATION) -> pd.DataFrame:
     """Load a bundled station's hourly climate record.
 
     Returns a DataFrame indexed by timestamp with columns ``prec``, ``pet``
     and (where present) ``qt``, i.e. the layout ``GR4H.run`` expects.  The
-    two bundled files name their date column differently, which is why this
-    is not just a ``read_csv``.
+    bundled files disagree on both column order and date format, which is
+    why this is not just a ``read_csv``.
     """
     path = demo_paths()["climate"] / f"GR4H_climatedata_{station}_hr.csv"
     if not path.exists():
         raise FileNotFoundError(f"Missing demo climate file for station {station}.")
     df = pd.read_csv(path)
     date_col = df.columns[0]
-    df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %H:%M")
+    df[date_col] = _parse_dates(df[date_col])
     return df.set_index(date_col).rename_axis("date")
 
 
@@ -274,47 +283,112 @@ def pet_climatology(forcings: pd.DataFrame, diurnal: str = "sine"
 
 
 # ------------------------------------------------------------ rainfall inputs
-def station_patterns(station: str = "421026",
-                     increments_path: str | Path | None = None
+def station_patterns(station: str = DEMO_STATION,
+                     increments_path: str | Path | None = None,
+                     point_durations_h: Sequence[float] = POINT_TP_DURATIONS_H,
                      ) -> TemporalPatternLibrary:
     """ARR temporal pattern ensembles for a bundled station.
 
-    Reads the same Data Hub increments file
-    :func:`~pyfloodrisk.build_design_storm` uses, but keeps the whole
-    ensemble for every duration and AEP band instead of selecting one.
+    Reads the station region's Data Hub increments files and keeps the whole
+    ensemble for every duration, rather than selecting one as
+    :func:`~pyfloodrisk.build_design_storm` does.
+
+    Two files are combined, because ARR publishes no single set that spans
+    the durations this framework needs
+    (:func:`~pyfloodrisk.demo_data.station_tp_region` names the region):
+
+    * **12 h and longer** come from the *areal* patterns, published per
+      standard catchment area.  The station's own area picks the nearest
+      standard one, and because areal patterns carry no AEP dependence that
+      single ensemble serves every AEP band.
+    * **shorter than 12 h**, down to ``min(point_durations_h)``, come from
+      the *point* patterns, which do vary by AEP band.  ARR publishes no
+      areal pattern below 12 h, so the alternative is not having those
+      durations at all.
+
+    Mixing the two is a compromise worth stating in a write-up: the short
+    bursts are point patterns applied to a catchment-average depth, so their
+    within-burst variability is that of a gauge rather than of a 255-357 km2
+    catchment, and it is not damped the way the areal patterns' is.  The
+    areal reduction factor still applies to the *depth* at every duration
+    (see :func:`station_ifd`); it is only the *shape* that is a point shape.
+
+    Parameters
+    ----------
+    station :
+        Bundled station id.
+    increments_path :
+        Read this one file instead, point or areal, and use it for every
+        duration it carries.  No combining is done.
+    point_durations_h :
+        Durations to take from the point patterns; must all be shorter than
+        :data:`~pyfloodrisk.demo_data.AREAL_TP_FROM_H`.  Pass an empty
+        sequence for areal patterns only.
     """
-    if increments_path is None:
-        increments_path = _pick_increment_file(demo_paths()["root"], station)
-    return TemporalPatternLibrary.from_arr_increments_csv(increments_path)
+    root = demo_paths()["root"]
+    if increments_path is not None:
+        return TemporalPatternLibrary.from_arr_increments_csv(
+            increments_path, area_km2=catchment_data(station))
+
+    areal = TemporalPatternLibrary.from_arr_increments_csv(
+        _pick_increment_file(root, station, kind="areal"),
+        area_km2=catchment_data(station))
+    if not len(point_durations_h):
+        return areal
+
+    too_long = [d for d in point_durations_h if d >= AREAL_TP_FROM_H]
+    if too_long:
+        raise ValueError(
+            f"point_durations_h must be shorter than {AREAL_TP_FROM_H} h, "
+            f"where the areal patterns take over; got {too_long}")
+    point = TemporalPatternLibrary.from_arr_increments_csv(
+        _pick_increment_file(root, station, kind="point"))
+    return TemporalPatternLibrary.combine(
+        point.subset(round(d * 60) for d in point_durations_h), areal)
 
 
-def station_ifd(station: str = "421026", arf=None) -> IFDCurve:
-    """The bundled *demonstration* design rainfall table for a demo station.
+def station_ifd(station: str = DEMO_STATION, arf=None) -> IFDCurve:
+    """The bundled BoM design rainfall table for a demo station.
 
-    Design rainfalls enter the framework one way only -- a tidy CSV read by
-    :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_csv` -- and this reads the
-    demo table bundled for ``station`` so the example workflow has something
-    to run on.
+    Design rainfalls enter the framework one way only -- a CSV -- and this
+    reads the Bureau IFD download bundled for ``station``
+    (``data/ifd/<station>_ifds.csv``) with
+    :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_bom_csv`, which handles the
+    download's metadata preamble.  Depths are tabulated from 63.2% to 1%
+    AEP over 1-168 h bursts; anything rarer than 1% is extrapolated by
+    :class:`~pyfloodrisk.dffa.ifd.IFDCurve`, so add ARR's rare design
+    rainfalls as extra columns if you have them.
 
-    **The bundled table is not a design IFD.**  It was fitted to the six-odd
-    years of the station's own pluviograph record, which is both biased and
-    imprecise and cannot support the rare end at all; the file says so in its
-    own header.  For anything you intend to report, extract BoM IFD depths
-    into a table of the same layout and read it with ``ifd_table_from_csv``.
+    The depths are *point* depths for the grid cell nearest the gauge, so
+    they are reduced to a catchment average by the ARR 2019 areal reduction
+    factor for the station's ARF region
+    (:func:`~pyfloodrisk.demo_data.station_arf_region`) unless you pass your
+    own ``arf``.  Pass :func:`~pyfloodrisk.dffa.ifd.unit_arf` to turn the
+    reduction off and work in point depths.
+
+    Parameters
+    ----------
+    station :
+        Bundled station id.
+    arf :
+        Areal reduction factor callable.  Defaults to
+        :class:`~pyfloodrisk.dffa.ifd.ARR2019ARF` for the station's region.
     """
-    path = demo_paths()["ifd"] / f"demo_ifd_{station}.csv"
+    path = demo_paths()["ifd"] / f"{station}_ifds.csv"
     if not path.exists():
         raise FileNotFoundError(
-            f"no bundled demo IFD table for station {station}; supply your "
-            "own depths with ifd_table_from_csv()")
-    return IFDCurve(ifd_table_from_csv(path), arf=arf)
+            f"no bundled IFD table for station {station}; supply your own "
+            "depths with ifd_table_from_csv() or ifd_table_from_bom_csv()")
+    if arf is None:
+        arf = ARR2019ARF(region=station_arf_region(station))
+    return IFDCurve(ifd_table_from_bom_csv(path), arf=arf)
 
 
 # ------------------------------------------------------------------ workflow
 def run_dffa(
-    station: str = "421026",
+    station: str = DEMO_STATION,
     parameters: Mapping[str, float] | None = None,
-    durations_h: Sequence[float] = (3, 6, 12, 24, 48, 72),
+    durations_h: Sequence[float] = (6, 12, 24, 48, 72),
     ifd: IFDCurve | None = None,
     stratification: Stratification | None = None,
     state_method: str = "bootstrap",
@@ -341,8 +415,11 @@ def run_dffa(
         (:func:`~pyfloodrisk.calibration`) and pass the result for anything
         you intend to look at twice.
     durations_h :
-        Storm durations to envelope over.  Fewer than the ARR standard set,
-        because the demo should finish in a minute or two.
+        Storm durations to envelope over.  Fewer than
+        :data:`~pyfloodrisk.dffa.mcs.STANDARD_DURATIONS_H`, because the demo
+        should finish in a minute or two.  The bundled areal temporal
+        patterns start at 12 h, so a shorter duration has no ensemble and
+        raises.
     ifd :
         Design rainfall curve.  Defaults to :func:`station_ifd`, the bundled
         demonstration table, which is **not** a design IFD -- pass your own

@@ -27,7 +27,7 @@ Shortest path, on a bundled demo station::
 
     from pyfloodrisk.dffa import run_dffa, diagnostics
 
-    out = run_dffa(station="421026")
+    out = run_dffa(station="117002A")
     print(out["results"].summary())
     diagnostics.plot_all(out["results"], "figures", ifd=out["ifd"])
 
@@ -51,7 +51,9 @@ With your own data, assemble the four inputs yourself::
                      Stratification.uniform_in_z()).run()
 """
 
-from .ifd import (ARR2019LongDurationARF, DEFAULT_IFD_AEPS, IFDCurve,
+from .ifd import (ARF_REGIONS, ARR2019ARF, ARR2019LongDurationARF,
+                  DEFAULT_IFD_AEPS, IFDCurve,
+                  ifd_table_from_bom_csv,
                   ifd_table_from_csv, unit_arf)
 from .patterns import (DEFAULT_AEP_BANDS, PreBurstSampler, TemporalPatternLibrary,
                        resample_increments)
@@ -68,6 +70,8 @@ from . import diagnostics, tpt
 
 __all__ = [
     "IFDCurve", "unit_arf", "ARR2019LongDurationARF", "ifd_table_from_csv",
+    "ARR2019ARF", "ARF_REGIONS",
+    "ifd_table_from_bom_csv",
     "DEFAULT_IFD_AEPS",
     "TemporalPatternLibrary", "PreBurstSampler", "resample_increments",
     "DEFAULT_AEP_BANDS",

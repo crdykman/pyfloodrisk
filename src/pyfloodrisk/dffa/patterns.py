@@ -27,6 +27,7 @@ Do one or the other, not both, or you will double-count antecedent wetting.
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
@@ -90,49 +91,122 @@ class TemporalPatternLibrary:
     patterns: dict[tuple[int, str], dict] = field(default_factory=dict)
     bands: Mapping[str, tuple[float, float]] = field(
         default_factory=lambda: dict(DEFAULT_AEP_BANDS))
+    #: Standard area (km2) of the areal ensemble loaded, or ``None`` for a
+    #: point library.  Areal patterns are published per area, not per AEP
+    #: band, so an areal library serves the same ensemble to every band.
+    areal_area_km2: float | None = None
 
     # ------------------------------------------------------------- loading
-    @classmethod
-    def from_arr_increments_csv(cls, path, bands=None) -> "TemporalPatternLibrary":
-        """Read an ARR Data Hub increments CSV.
+    @staticmethod
+    def _read_increments_raw(path) -> pd.DataFrame:
+        """Read an increments CSV whose rows are longer than its header.
 
-        Expected layout (point or areal download): a header row of
-        ``EventID, Duration, TimeStep, Region, AEP`` followed by one column per
-        rainfall increment (expressed as a percentage of the burst depth), one
-        row per pattern.  ``Duration`` and ``TimeStep`` are in minutes and
-        ``AEP`` holds the band name.  Comment/metadata lines beginning with
-        ``[`` are skipped.
-
-        This loader is deliberately tolerant about column naming, but *do* check
-        one duration by hand: the Data Hub file layout has changed between
-        releases.
+        The Data Hub writes a single ``Increments`` header for a variable
+        number of increment columns, so every row after the header is padded
+        to the longest row before parsing.  Reading these files with a plain
+        ``read_csv`` silently drops all but the first increment (and, with
+        ``on_bad_lines="skip"``, whole rows), which is why this exists.
         """
-        raw = pd.read_csv(path, header=0, skip_blank_lines=True,
-                          comment=None, dtype=str, engine="python",
-                          on_bad_lines="skip")
-        raw = raw[~raw.iloc[:, 0].astype(str).str.startswith("[")]
+        with open(path, newline="", encoding="utf-8-sig", errors="replace") as fh:
+            rows = [r for r in csv.reader(fh) if any(c.strip() for c in r)]
+        rows = [r for r in rows if not str(r[0]).lstrip().startswith("[")]
+        if len(rows) < 2:
+            raise ValueError(f"{path}: no data rows in increments file")
+
+        header = [str(c).strip() for c in rows[0]]
+        inc_start = next(
+            (i for i, c in enumerate(header) if c.lower() == "increments"),
+            None)
+        if inc_start is None:
+            # no "Increments" marker: assume the usual five identifying columns
+            inc_start = min(5, len(header))
+        width = max(len(r) for r in rows[1:])
+        names = ([h for h in header[:inc_start]]
+                 + [f"Inc{i + 1}" for i in range(width - inc_start)])
+        data = [r + [""] * (width - len(r)) for r in rows[1:]]
+        return pd.DataFrame(data, columns=names)
+
+    @classmethod
+    def from_arr_increments_csv(cls, path, bands=None, area_km2=None
+                                ) -> "TemporalPatternLibrary":
+        """Read an ARR Data Hub increments CSV, point or areal.
+
+        Expected layout: a header row of
+        ``EventID, Duration, TimeStep, Region, <key>, Increments`` followed by
+        one row per pattern, whose increments are percentages of the burst
+        depth.  ``Duration`` and ``TimeStep`` are in minutes.  Metadata lines
+        beginning with ``[`` are skipped.
+
+        The ``<key>`` column is what distinguishes the two kinds of download:
+
+        * **point** patterns key on ``AEP``, holding the band name
+          (``frequent``/``intermediate``/``rare``), and each band gets its own
+          ensemble.
+        * **areal** patterns key on ``Area``, the standard catchment area in
+          km2 (100, 200, 500, ... 40000).  They carry *no* AEP dependence, so
+          ``area_km2`` selects the nearest standard area and that one ensemble
+          is served for every AEP band.  Areal patterns also only cover long
+          durations (12 h and up).
+
+        This loader is deliberately tolerant about column naming, but *do*
+        check one duration by hand: the Data Hub layout has changed between
+        releases.
+
+        Parameters
+        ----------
+        path :
+            Increments CSV.
+        bands :
+            AEP band boundaries; defaults to :data:`DEFAULT_AEP_BANDS`.
+        area_km2 :
+            Catchment area, required for an areal file and ignored for a point
+            file.  The nearest bundled standard area is used.
+        """
+        raw = cls._read_increments_raw(path)
         cols = {str(c).strip().lower(): c for c in raw.columns}
-        need = ["eventid", "duration", "timestep", "aep"]
-        missing = [n for n in need if n not in cols]
+        missing = [n for n in ("eventid", "duration", "timestep")
+                   if n not in cols]
         if missing:
             raise ValueError(
-                f"increments file is missing column(s) {missing}; got {list(raw.columns)}")
-        meta = [cols[n] for n in need] + ([cols["region"]] if "region" in cols else [])
-        inc_cols = [c for c in raw.columns if c not in meta]
+                f"increments file is missing column(s) {missing}; "
+                f"got {list(raw.columns)}")
+
+        areal = "aep" not in cols
+        if areal and "area" not in cols:
+            raise ValueError(
+                "increments file has neither an 'AEP' band column (point "
+                f"patterns) nor an 'Area' column (areal); got {list(raw.columns)}")
+        key_col = cols["area"] if areal else cols["aep"]
 
         lib = cls(bands=dict(bands) if bands else dict(DEFAULT_AEP_BANDS))
-        grp = raw.groupby([cols["duration"], cols["aep"], cols["timestep"]], sort=False)
-        for (dur, band, ts), block in grp:
+        if areal:
+            areas = np.unique(pd.to_numeric(raw[key_col], errors="coerce").dropna())
+            if area_km2 is None:
+                raise ValueError(
+                    "this is an areal increments file, keyed by catchment area "
+                    f"rather than AEP band; pass area_km2 to choose one of {list(areas)}")
+            chosen = float(min(areas, key=lambda a: abs(a - float(area_km2))))
+            raw = raw[pd.to_numeric(raw[key_col], errors="coerce") == chosen]
+            lib.areal_area_km2 = chosen
+
+        inc_cols = [c for c in raw.columns if str(c).startswith("Inc")]
+        group_cols = ([cols["duration"], cols["timestep"]] if areal
+                      else [cols["duration"], key_col, cols["timestep"]])
+        for keys, block in raw.groupby(group_cols, sort=False):
+            dur, ts = (keys[0], keys[-1])
             inc = block[inc_cols].apply(pd.to_numeric, errors="coerce").to_numpy()
             # trailing all-NaN columns are padding for shorter durations
             keep = ~np.all(np.isnan(inc), axis=0)
             inc = np.nan_to_num(inc[:, keep])
-            key = (int(float(dur)), str(band).strip().lower())
-            lib.patterns[key] = {
+            entry = {
                 "increments": inc,
                 "timestep_min": float(ts),
                 "event_ids": block[cols["eventid"]].to_numpy(),
             }
+            # an areal ensemble has no AEP dependence, so it serves every band
+            names = list(lib.bands) if areal else [str(keys[1]).strip().lower()]
+            for name in names:
+                lib.patterns[(int(float(dur)), name)] = entry
         if not lib.patterns:
             raise ValueError("no patterns parsed")
         return lib
@@ -150,6 +224,49 @@ class TemporalPatternLibrary:
                 "event_ids": np.arange(inc.shape[0]),
             }
         return lib
+
+    # --------------------------------------------------------- combining
+    def subset(self, durations_min) -> "TemporalPatternLibrary":
+        """A copy holding only the listed durations (in minutes).
+
+        Used to take the short durations from a point library and the long
+        ones from an areal library -- see
+        :func:`~pyfloodrisk.dffa.workflow.station_patterns`.
+        """
+        wanted = {int(d) for d in durations_min}
+        missing = wanted - set(self.durations_min)
+        if missing:
+            raise KeyError(
+                f"no patterns for duration(s) {sorted(missing)} min; this "
+                f"library has {self.durations_min}")
+        out = TemporalPatternLibrary(bands=dict(self.bands),
+                                     areal_area_km2=self.areal_area_km2)
+        out.patterns = {k: v for k, v in self.patterns.items() if k[0] in wanted}
+        return out
+
+    @classmethod
+    def combine(cls, *libraries: "TemporalPatternLibrary"
+                ) -> "TemporalPatternLibrary":
+        """One library from several, later ones winning on a shared key.
+
+        The bands must agree; ``areal_area_km2`` is carried over from the
+        first areal library, since a combined library is areal only in the
+        durations that came from an areal source.
+        """
+        libraries = [lib for lib in libraries if lib is not None]
+        if not libraries:
+            raise ValueError("combine() needs at least one library")
+        bands = dict(libraries[0].bands)
+        for lib in libraries[1:]:
+            if dict(lib.bands) != bands:
+                raise ValueError(
+                    "cannot combine libraries with different AEP bands")
+        areal = next((lib.areal_area_km2 for lib in libraries
+                      if lib.areal_area_km2 is not None), None)
+        out = cls(bands=bands, areal_area_km2=areal)
+        for lib in libraries:
+            out.patterns.update(lib.patterns)
+        return out
 
     # ------------------------------------------------------------ sampling
     @property

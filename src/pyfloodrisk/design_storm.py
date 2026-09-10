@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .demo_data import demo_paths
+from .demo_data import catchment_data, demo_paths, station_tp_region
 
 
 # Pre-burst depths for the six standard pre-burst bands (mm)
@@ -17,9 +17,9 @@ _PREBURST_24H = [0.0, 0.6, 1.0, 1.3, 8.2, 13.4]
 
 
 def build_design_storm(
-    station: str = "421026",
-    duration_hours: int = 6,
-    timestep_minutes: int = 15,
+    station: str = "117002A",
+    duration_hours: int = 12,
+    timestep_minutes: int = 30,
     intensity_mm: float = 107.0,
     aep_band_index: int = 3,
     preburst_index: int = 6,
@@ -32,13 +32,18 @@ def build_design_storm(
     station:
         Station id.
     duration_hours:
-        Storm duration in hours.
+        Storm duration in hours.  The bundled *areal* patterns only cover
+        12-168 h, so 12 is the shortest available.
     timestep_minutes:
-        Temporal-pattern sub-hourly timestep in minutes.
+        Temporal-pattern sub-hourly timestep in minutes.  The bundled areal
+        patterns are on a 30-minute step.
     intensity_mm:
         Total storm depth (mm) across the design duration.
     aep_band_index:
-        1-based index into the unique AEP values found in the increment file.
+        1-based index into the unique AEP values found in the increment
+        file.  **Ignored for areal patterns**, which are published per
+        standard catchment area with no AEP dependence -- there the
+        ensemble is chosen by the station's own catchment area.
     preburst_index:
         1-based index into the pre-burst depth table.
     preburst_factor:
@@ -64,16 +69,30 @@ def build_design_storm(
 
     tmp_tp_dur = tmp_tp[tmp_tp["Duration"] == duration_minutes].copy()
     if tmp_tp_dur.empty:
-        raise ValueError("No temporal patterns found for the requested duration.")
+        available = sorted(pd.to_numeric(tmp_tp["Duration"], errors="coerce")
+                           .dropna().unique() / 60.0)
+        raise ValueError(
+            f"No temporal patterns for a {duration_hours} h storm in "
+            f"{increment_path.name}; it covers {available} h. Areal patterns "
+            "only go down to 12 h.")
 
-    aep_values = tmp_tp_dur["AEP"].unique().tolist()
-    if aep_band_index > len(aep_values):
-        raise ValueError("Requested AEP band index is out of range.")
-    tp_sub = aep_values[aep_band_index - 1]
+    # Point patterns are published per AEP band, areal patterns per standard
+    # catchment area with no AEP dependence at all -- so which column selects
+    # the ensemble depends on which kind of file this is.
+    key_col = "AEP" if "AEP" in tmp_tp_dur.columns else "Area"
+    if key_col == "AEP":
+        aep_values = tmp_tp_dur["AEP"].unique().tolist()
+        if aep_band_index > len(aep_values):
+            raise ValueError("Requested AEP band index is out of range.")
+        tp_sub = aep_values[aep_band_index - 1]
+    else:
+        areas = np.unique(
+            pd.to_numeric(tmp_tp_dur["Area"], errors="coerce").dropna())
+        tp_sub = min(areas, key=lambda a: abs(a - float(catchment_data(station))))
 
     inc_cols = [c for c in tmp_tp_dur.columns if c.startswith("Inc")][:step_rain]
-    tp_selected = tmp_tp_dur[tmp_tp_dur["AEP"] == tp_sub][
-        ["EventID", "Duration", "TimeStep", "Region", "AEP"] + inc_cols
+    tp_selected = tmp_tp_dur[tmp_tp_dur[key_col] == tp_sub][
+        ["EventID", "Duration", "TimeStep", "Region", key_col] + inc_cols
     ].dropna(axis=1, how="all").reset_index(drop=True)
     tp_selected.insert(0, "No", range(1, len(tp_selected) + 1))
 
@@ -145,11 +164,12 @@ def build_design_storm(
 # ---------------------------------------------------------------------------
 
 
-def _pick_increment_file(root: Path, station: str) -> Path:
+def _pick_increment_file(root: Path, station: str, kind: str = "areal") -> Path:
     """Locate a station's temporal-pattern increment file.
 
-    Prefers a point (non-areal) increment file; falls back to an
-    areal-average one (``Areal_*``) if no point file is bundled.
+    Both kinds are bundled per region, so which one you want has to be said
+    rather than inferred: ``data/tps/<region>`` holds the point patterns and
+    ``data/tps/Areal_<region>`` the areal ones.
 
     Parameters
     ----------
@@ -157,22 +177,26 @@ def _pick_increment_file(root: Path, station: str) -> Path:
         Root of the bundled demo data (see :func:`~pyfloodrisk.demo_paths`).
     station:
         Station id.
+    kind:
+        ``"areal"`` (default) or ``"point"``.  Areal is the default because
+        the demo catchments are a few hundred km2, where a catchment-average
+        pattern is the right one; point patterns exist for the short bursts
+        ARR publishes no areal pattern for.
 
     Returns
     -------
     Path to the increment CSV file.
     """
-    dir_path = root / f"CS_{station}"
-    all_files = list(dir_path.glob("*_Increments.csv"))
-    generic = [f for f in all_files if not f.name.startswith("Areal_")]
-    if generic:
-        return generic[0]
-    areal = [f for f in all_files if f.name.startswith("Areal_")]
-    if not areal:
+    if kind not in ("point", "areal"):
+        raise ValueError(f"kind must be 'point' or 'areal', got {kind!r}")
+    region = station_tp_region(station)
+    folder = region if kind == "point" else f"Areal_{region}"
+    matches = list((root / "tps" / folder).glob("*_Increments.csv"))
+    if not matches:
         raise FileNotFoundError(
-            f"No temporal-pattern increment file found for station {station}."
-        )
-    return areal[0]
+            f"No {kind} temporal-pattern increment file for station "
+            f"{station} (looked in {root / 'tps' / folder})")
+    return matches[0]
 
 
 def _read_increment_file(path: Path) -> pd.DataFrame:

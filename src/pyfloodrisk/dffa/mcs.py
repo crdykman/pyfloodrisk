@@ -59,8 +59,13 @@ from .tpt import (ARR_FIRST_FACTOR, DEFAULT_PLOTTING_POSITION, bootstrap_quantil
 
 __all__ = ["MCSConfig", "DerivedFFA", "DFFAResults", "STANDARD_DURATIONS_H"]
 
-#: Standard ARR design storm durations (hours).
-STANDARD_DURATIONS_H = (1, 2, 3, 6, 9, 12, 18, 24, 36, 48, 72)
+#: Design storm durations (hours) to envelope over -- the durations the
+#: bundled ARR temporal patterns cover.  From 12 h up these are *areal*
+#: patterns; 6 and 9 h are *point* patterns, because ARR publishes no areal
+#: pattern shorter than 12 h.  The point files go down to 10 minutes, so
+#: extend the short end if a burst that short is meaningful on your
+#: catchment.
+STANDARD_DURATIONS_H = (6, 9, 12, 18, 24, 36, 48, 72, 96, 120, 144, 168)
 
 
 @dataclass
