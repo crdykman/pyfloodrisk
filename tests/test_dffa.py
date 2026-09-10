@@ -213,8 +213,7 @@ def _state_table(n=5000, x1=300.0, x3=50.0, seed=0):
     return df
 
 
-@pytest.mark.parametrize("method", ["bootstrap", "smoothed", "empirical_copula",
-                                    "gaussian_copula"])
+@pytest.mark.parametrize("method", ["bootstrap", "smoothed", "empirical_copula"])
 def test_state_sampler_preserves_bounds_and_dependence(method):
     if "copula" in method and not have_pyvinecopulib():
         pytest.skip("pyvinecopulib not installed")

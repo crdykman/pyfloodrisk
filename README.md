@@ -22,8 +22,8 @@ from streamflow calibration through to design flood simulation:
   patterns and antecedent states to produce a design flood ensemble
   (`simulate_design_flood`, `run_demo_workflow`).
 - **Derived flood frequency analysis** — a stratified Monte Carlo (joint
-  probability) framework in the ARR/RORB form, with the sampled initial
-  loss replaced by a GR4H state vector drawn jointly from a continuous
+  probability) framework in the ARR event-based form, with the sampled
+  initial loss replaced by a GR4H state vector drawn jointly from a continuous
   run, producing a full flood frequency curve rather than a single design
   event (`pyfloodrisk.dffa`; see [docs/dffa.md](docs/dffa.md)).
 

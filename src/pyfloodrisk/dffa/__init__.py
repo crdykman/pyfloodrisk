@@ -1,9 +1,10 @@
 """
 Derived flood frequency analysis with GR4H in event mode.
 
-A Monte Carlo (joint probability) framework in the form used with RORB for
-design flood estimation under ARR, with the sampled initial loss replaced by
-a jointly sampled GR4H **state vector** drawn from a continuous simulation.
+A Monte Carlo (joint probability) framework in the form used with event-based
+models for design flood estimation under ARR, with the sampled initial loss
+replaced by a jointly sampled GR4H **state vector** drawn from a
+continuous simulation.
 Rainfall depths come from an IFD curve, temporal patterns from the ARR
 ensembles, and antecedent conditions from the state distribution of a
 continuous run of the same calibrated model.  Sampling of the rainfall
@@ -57,8 +58,7 @@ from .patterns import (DEFAULT_AEP_BANDS, PreBurstSampler, TemporalPatternLibrar
 from .states import (UH_TOTAL, InitialStateSampler, PETClimatology,
                      have_pyvinecopulib)
 from .stratification import Stratification
-from .engine import (CallableEngine, EventModel, GR4HEventEngine,
-                     mm_per_step_to_cumecs)
+from .engine import EventModel, GR4HEventEngine, mm_per_step_to_cumecs
 from .mcs import STANDARD_DURATIONS_H, DerivedFFA, DFFAResults, MCSConfig
 from .workflow import (DEMO_PARAMETERS, continuous_state_table,
                        event_onset_states, load_station_forcings,
@@ -73,7 +73,7 @@ __all__ = [
     "DEFAULT_AEP_BANDS",
     "InitialStateSampler", "PETClimatology", "UH_TOTAL", "have_pyvinecopulib",
     "Stratification",
-    "EventModel", "CallableEngine", "GR4HEventEngine", "mm_per_step_to_cumecs",
+    "EventModel", "GR4HEventEngine", "mm_per_step_to_cumecs",
     "MCSConfig", "DerivedFFA", "DFFAResults", "STANDARD_DURATIONS_H",
     "continuous_state_table", "event_onset_states", "state_sampler_from_run",
     "load_station_forcings",

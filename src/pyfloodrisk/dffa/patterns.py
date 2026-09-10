@@ -7,9 +7,10 @@ rainfall AEP, aggregating it to the hydrological model's timestep in a
 mass-conserving way.
 
 ``PreBurstSampler`` is optional but matters here.  ARR design rainfalls are
-*bursts*; in the RORB Monte Carlo framework the embedded-burst problem is dealt
-with by adjusting the sampled initial loss.  Running GR4H in event mode from a
-sampled *state* removes the loss parameter but not the problem: the state
+*bursts*; in a conventional event-based Monte Carlo framework the
+embedded-burst problem is dealt with by adjusting the sampled initial loss.
+Running GR4H in event mode from a sampled
+*state* removes the loss parameter but not the problem: the state
 distribution derived from continuous simulation is a distribution of states at
 the start of a complete storm, whereas the IFD burst begins part way into one.
 Two defensible treatments:

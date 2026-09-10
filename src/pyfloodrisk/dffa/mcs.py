@@ -36,7 +36,8 @@ What this framework does and does not assume
   high.  :meth:`DFFAResults.pooled_quantiles` gives the unbiased alternative if
   you are prepared to assume probabilities for each duration.
 * Baseflow is *not* added separately: GR4H's routing store produces it, which is
-  one of the substantive differences from the RORB implementation.
+  one of the substantive differences from a conventional event-based
+  implementation.
 """
 
 from __future__ import annotations

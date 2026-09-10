@@ -1,13 +1,13 @@
 # Derived flood frequency analysis with GR4H in event mode
 
 `pyfloodrisk.dffa` is a Monte Carlo (joint probability) framework in the form
-used for RORB design flood estimation under ARR, with the sampled initial loss
-replaced by a jointly sampled GR4H **state vector** drawn from a continuous
-simulation. Rainfall depths come from an IFD curve, temporal patterns from the
-ARR ensembles, and antecedent conditions from the state distribution of a
-continuous run of the same calibrated model. Sampling of the rainfall
-probability domain is stratified, and flood quantiles are estimated empirically
-by the total probability theorem.
+used for event-based design flood estimation under ARR, with the sampled
+initial loss replaced by a jointly sampled GR4H **state vector** drawn from a
+continuous simulation. Rainfall depths come from an IFD curve, temporal
+patterns from the ARR ensembles, and antecedent conditions from the state
+distribution of a continuous run of the same calibrated model. Sampling of the
+rainfall probability domain is stratified, and flood quantiles are estimated
+empirically by the total probability theorem.
 
 ```
 pyfloodrisk/dffa/
@@ -190,7 +190,6 @@ would produce states GR4H could never reach.
 | `bootstrap` | draws whole rows | production runs — preserves every dependence exactly |
 | `smoothed` | donor + jitter, kernel covariance taken from the pool, donor shrunk by `1/√(1+h²)` so the covariance is preserved | short or heavily conditioned donor pools |
 | `empirical_copula` | nonparametric **vine copula** (`pyvinecopulib`, TLL pair copulas) on the pseudo-observations, with kernel or empirical margins | dependence estimated rather than assumed; asymmetric and tail dependence |
-| `gaussian_copula` | Gaussian copula, same margins | sensitivity via `corr_override` — changes dependence, leaves margins untouched |
 | `independent_kde` | each state variable from its own boundary-corrected 1-D KDE (`pv.Kde1d`, which handles the bounded stores and the point mass at zero in `uh_total`), sampled independently | isolating how much the *joint* structure matters, as against the marginals alone |
 
 `InitialStateSampler.dependence(sampled)` reports Kendall's tau between state
@@ -259,8 +258,8 @@ the state table with the engine that will consume it (`continuous_state_table`
 does this), and with the same parameter set, because a table built at a
 different `x4` is silently zero-padded or truncated to the engine's UH length.
 `tests/test_gr4h_state.py` pins the convention down algebraically; if you
-plug a different model in through `CallableEngine`, write the equivalent test
-for it first.
+plug a different model in behind your own `EventModel` subclass, write the
+equivalent test for it first.
 
 **Design rainfalls.** Nothing in the package is a design IFD.
 `ifd_from_record` fits a log-normal curve to the annual exceedance series of a
@@ -308,16 +307,17 @@ your state distribution is uniquely placed to test: pass `state_pool_fn` to
 `DerivedFFA` (a callable returning a donor-pool mask given the sampled rainfall
 AEP and duration) and compare the resulting curve against the independent case.
 If the difference is material, the independent case is an unquantified bias in
-the whole RORB-style framework, not a limitation of this code.
+the whole event-based framework, not a limitation of this code.
 
 **Bursts, not complete storms.** IFD depths are bursts, and the state
 distribution from continuous simulation is a distribution of states at the
-*start of a complete storm* — not at the start of an embedded burst. The RORB
-framework patches this by adjusting the sampled initial loss. Here you have two
-cleaner options: prepend sampled pre-burst rainfall and let GR4H wet the stores
-itself (`PreBurstSampler`), or condition the state distribution on antecedent
-rainfall (`continuous_state_table(wet_only=True)`, or `state_pool_fn`). Doing
-both double-counts the antecedent wetting.
+*start of a complete storm* — not at the start of an embedded burst. The
+conventional event-based framework patches this by adjusting the sampled
+initial loss. Here you have two cleaner options: prepend sampled pre-burst
+rainfall and let GR4H wet the stores itself (`PreBurstSampler`), or condition
+the state distribution on antecedent rainfall
+(`continuous_state_table(wet_only=True)`, or `state_pool_fn`). Doing both
+double-counts the antecedent wetting.
 
 **Enveloping durations.** Taking the maximum over durations at each AEP is
 consistent with design practice but biases the estimate high, because the
@@ -338,8 +338,9 @@ that each parameter set needs its own state table, because `x4` sets the length
 of the UH memory.
 
 **Baseflow.** Not added separately — GR4H's routing store produces it. This is a
-substantive difference from the RORB implementation, where baseflow is a
-separately sampled input, and it is one of the arguments for doing this at all.
+substantive difference from a conventional event-based implementation, where
+baseflow is a separately sampled input, and it is one of the arguments for
+doing this at all.
 
 ## Diagnostics
 
