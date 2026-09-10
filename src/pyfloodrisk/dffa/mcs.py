@@ -87,8 +87,18 @@ class MCSConfig:
     preburst: PreBurstSampler | None = None
     seed: int = 20260909
     chunk_size: int = 2000
-    #: number of hydrographs retained per duration for plotting
+    #: whether to retain hydrographs for plotting.  Retention is by target
+    #: AEP (see :attr:`hydrograph_aeps`), so this is really an on/off switch
+    #: with a cap: 0 keeps none, any positive number caps how many of the
+    #: targets are kept.
     store_hydrographs: int = 20
+    #: rainfall AEPs to retain a hydrograph nearest to, one each.  The event
+    #: whose *rainfall* AEP is closest to each target -- closest in log AEP,
+    #: so the rare targets are not swamped by the frequent ones -- is kept.
+    #: Retaining by target rather than by position is what makes the stored
+    #: events design-scale: sampling order runs from frequent to rare, so
+    #: taking the first N would keep only the most frequent events.
+    hydrograph_aeps: Sequence[float] = (0.5, 0.2, 0.1, 0.05, 0.02, 0.01)
     progress: bool = True
 
 
@@ -169,7 +179,14 @@ class DerivedFFA:
             sampled = pd.concat(parts, ignore_index=True)
         state_dicts = self.states.to_state_dicts(sampled)
 
-        rows, kept = [], []
+        # hydrograph retention by target AEP: the running best match for each
+        # target, as target -> (distance in log AEP, record)
+        targets = ([float(t) for t in cfg.hydrograph_aeps]
+                   if cfg.store_hydrographs else [])
+        log_targets = np.log10(targets) if targets else np.empty(0)
+        best: dict[float, tuple] = {}
+
+        rows = []
         for start in range(0, n, cfg.chunk_size):
             sl = slice(start, min(start + cfg.chunk_size, n))
             batch, meta = [], []
@@ -202,8 +219,27 @@ class DerivedFFA:
                     **{k: m[k] for k in ("pattern_id", "pattern_band", "pattern_index",
                                          "preburst_ratio", "preburst_depth_mm",
                                          "burst_start_step", "month")}))
-                if len(kept) < cfg.store_hydrographs and j % 37 == 0:
-                    kept.append((i, batch[j][0], q))
+                if targets:
+                    la = np.log10(max(float(aep[i]), 1e-15))
+                    for t, lt in zip(targets, log_targets):
+                        dist = abs(la - lt)
+                        if t not in best or dist < best[t][0]:
+                            best[t] = (dist, {
+                                "target_aep": t,
+                                "aep_rain": float(aep[i]),
+                                "index": i,
+                                "duration_h": duration_h,
+                                "depth_mm": float(depth[i]),
+                                "q_peak": float(q[ipk]),
+                                "rain": batch[j][0],
+                                "q": q,
+                            })
+
+        # rarest target last, so a legend reads frequent -> rare
+        kept = [rec for _, rec in
+                sorted(best.values(), key=lambda dr: -dr[1]["target_aep"])]
+        if cfg.store_hydrographs:
+            kept = kept[:int(cfg.store_hydrographs)]
         #: hydrographs retained from the most recent call, for plotting
         self.last_hydrographs = kept
         return pd.DataFrame(rows)
@@ -244,6 +280,11 @@ class DFFAResults:
     events: pd.DataFrame
     config: MCSConfig
     stratification: Stratification
+    #: ``duration_h -> [record, ...]``, one record per
+    #: :attr:`MCSConfig.hydrograph_aeps` target, frequent first.  Each record
+    #: is a dict with ``target_aep``, ``aep_rain`` (the sampled AEP actually
+    #: nearest that target), ``index``, ``duration_h``, ``depth_mm``,
+    #: ``q_peak``, ``rain`` and ``q``.
     hydrographs: Mapping[float, list] = field(default_factory=dict)
     estimator: str = "arr"
     plotting_position: str | float = DEFAULT_PLOTTING_POSITION

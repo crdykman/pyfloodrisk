@@ -182,9 +182,9 @@ thing. Delineation finds every rise, most of which are not floods, so the
 events are then trimmed to an exceedance-per-year rate — by default the 6
 largest per year of record (`ey=6`), ranked on peak flow or on event volume
 (`rank_by="peak"` or `"volume"`); `ey=None` keeps the lot. On 117002A that is
-the difference between 338 rises (37/yr) and 54 events (6/yr), and it nearly
-doubles the median antecedent production store (100 → 189 mm), which is the
-whole point: big events start on wet catchments. It is a far smaller pool (one
+the difference between 265 rises (29/yr) and 54 events (6/yr), and it lifts the
+median antecedent production store by about 70% (3.8 → 6.4 mm of a 7.7 mm
+store), which is the whole point: big events start on wet catchments. It is a far smaller pool (one
 row per event rather than per hour), so it is the case where the smoothed and
 copula methods earn their keep. Conditioning
 on rainfall or on events makes the pool wetter, and the design flood larger;
@@ -210,17 +210,43 @@ would produce states GR4H could never reach.
 variables for the input and the sample — **run it before trusting any
 non-bootstrap method**, because it says whether the dependence you meant to
 preserve (or destroy) actually was. It earns its keep immediately on 117002A:
-`smoothed` reproduces the tau between the two stores (0.777 against 0.787) but
-collapses the tau between each store and `uh_total` (0.26 against 0.89, and
-0.28 against 0.71), because `uh_total` is zero for most hours and jittering a
+`smoothed` roughly holds the tau between the two stores (0.455 against 0.491)
+but collapses the tau between the production store and `uh_total` (0.49
+against 0.84), because `uh_total` is zero for most hours and jittering a
 variable with a point mass at its boundary smears that mass out. `bootstrap`
-reproduces all three to within 0.005, which is one more reason it is the
-default.
+reproduces all three to within 0.003, which is one more reason it is the
+default. `empirical_copula` does markedly better than `smoothed` on the same
+pairs (0.478 / 0.787 / 0.501 against inputs of 0.491 / 0.837 / 0.522), which
+is what the vine buys you; `independent_kde` returns tau ≈ 0 on all three, as
+it is meant to.
+
+**Compare methods on tau, not on the design flood — at least not at demo
+sizes.** On the bundled experiment (25 strata × 40 simulations) the four
+methods sit within 3% of each other down to 1% AEP and diverge by up to 15%
+at 0.2% AEP, but re-running one method under five seeds moves the 0.2% AEP
+quantile by 12% (bootstrap) to 22% (copula). The rare-end differences are
+therefore inside the Monte Carlo noise and should not be read as a ranking:
+resolving them needs far more simulations per stratum. The tau diagnostic,
+computed on 20,000 sampled states, is effectively noise-free and does
+separate the methods cleanly.
 
 ## Things to verify before trusting output
 
 These are the places where the code is doing something you should confirm
 against your own data rather than take on trust.
+
+**Check the derived curve against the floods the gauge actually recorded.**
+This is the cheapest and most damning test available, and it is not part of
+the framework: plot the station's observed annual maxima on the derived curve.
+The bundled demo parameters fail it badly. On 117002A the model reproduces
+annual maxima averaging 43% of observed and misses the record's largest flood
+almost entirely (2018: 1290 m³/s observed, 77 m³/s simulated), so the derived
+1% AEP peak of ~400 m³/s sits *below* the second-largest flood in a ten-year
+record. Nash-Sutcliffe does not catch this — it is 0.34 for those parameters
+against −1.49 for the ones they replaced — because NSE is dominated by the
+bulk of the record while a flood frequency curve depends on its extreme tail.
+Calibrate against peaks (`robust_calibration`, or an event-weighted objective)
+if the curve is the deliverable.
 
 **The state vector is the engine's own.** The state dict
 `{"prod_store", "rout_store", "uh1", "uh2"}` only means what
@@ -254,7 +280,7 @@ method — the long-duration equation with the ten regions' coefficients bundled
 interpolation between the 12 h and 24 h values, and the 1–10 km² scaling —
 and `station_ifd` applies it by default for the station's region. On the demo
 catchments it takes roughly 7% off a 24 h 1% AEP depth and 11–13% off a 12 h
-one, and about 14% off the 1% AEP peak.
+one, and about 7% off the 1% AEP peak.
 
 Three things to check. **The region is a map lookup**, not a formula on the
 coordinates: `DEMO_ARF_REGIONS` records `East Coast North` for 117002A and
@@ -302,8 +328,8 @@ upward. The ARF still reduces the *depth* at every duration; it is only the
 shape that is a point shape. Whether that matters depends on whether the short
 durations are anywhere near critical, which is worth checking directly:
 `DFFAResults.summary()` reports the critical duration at each AEP, and on
-117002A no AEP picks 6 h (48 h dominates, 12 h at the rarest), so the point
-patterns are not driving the answer there. **If your envelope keeps choosing
+117002A no AEP picks 6 h (48 h is critical throughout), so the point patterns
+are not driving the answer there. **If your envelope keeps choosing
 the shortest duration you have, the real critical duration is probably shorter
 still** — extend `point_durations_h` down (the point files go to 10 minutes)
 rather than trusting the boundary value.

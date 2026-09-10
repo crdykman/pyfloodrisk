@@ -16,7 +16,8 @@ import pandas as pd
 import pytest
 from scipy.stats import norm
 
-from pyfloodrisk.dffa import (GR4HEventEngine, IFDCurve, InitialStateSampler,
+from pyfloodrisk.dffa import (DerivedFFA, GR4HEventEngine, IFDCurve,
+                              InitialStateSampler, MCSConfig,
                               Stratification, TemporalPatternLibrary,
                               have_pyvinecopulib, resample_increments, tpt)
 
@@ -322,3 +323,70 @@ def test_wetter_states_give_bigger_peaks():
 def test_engine_warns_at_a_non_hourly_timestep():
     with pytest.warns(UserWarning, match="hourly model"):
         GR4HEventEngine(PARAMS, area_km2=100.0, dt_hours=0.25)
+
+
+# ------------------------------------------------- hydrograph retention
+def _retention_run(store=20, aeps=(0.5, 0.2, 0.1, 0.05, 0.02, 0.01)):
+    """A small run whose only purpose is the retained hydrographs."""
+    ifd = IFDCurve(pd.DataFrame(
+        {0.5: [40.0, 60.0], 0.05: [70.0, 100.0], 0.005: [110.0, 150.0]},
+        index=[12.0, 24.0]))
+    tp = TemporalPatternLibrary.from_arrays(
+        {(720, b): (np.tile(100.0 / 12, (3, 12)), 60.0)
+         for b in ("frequent", "intermediate", "rare")})
+    table = pd.DataFrame({"date": pd.date_range("2000-01-01", periods=200, freq="h"),
+                          "prod_store": np.linspace(20, 300, 200),
+                          "rout_store": np.linspace(5, 50, 200)})
+    states = InitialStateSampler(table, x1=350.0, x3=60.0, date_col="date")
+    engine = GR4HEventEngine({"x1": 350.0, "x2": -0.8, "x3": 60.0, "x4": 6.0},
+                             area_km2=100.0)
+    cfg = MCSConfig(area_km2=100.0, durations_h=[12.0], dt_hours=1.0,
+                    store_hydrographs=store, hydrograph_aeps=aeps,
+                    progress=False, seed=7)
+    strat = Stratification.uniform_in_z(aep_max=0.9, aep_min=1e-4,
+                                        n_strata=12, n_per_stratum=20,
+                                        n_per_end=20)
+    return DerivedFFA(ifd, tp, states, engine, cfg, strat).run()
+
+
+def test_hydrographs_are_retained_one_per_target_aep():
+    res = _retention_run()
+    kept = res.hydrographs[12.0]
+    assert [r["target_aep"] for r in kept] == [0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
+    # frequent first, so a legend reads in order
+    assert [r["aep_rain"] for r in kept] == sorted(
+        (r["aep_rain"] for r in kept), reverse=True)
+
+
+def test_each_retained_hydrograph_is_the_nearest_event_to_its_target():
+    """The whole point: retention must not depend on simulation order."""
+    res = _retention_run()
+    events = res.events[res.events["duration_h"] == 12.0].reset_index(drop=True)
+    all_aeps = events["aep_rain"].to_numpy(float)
+    for rec in res.hydrographs[12.0]:
+        nearest = np.abs(np.log10(all_aeps) - np.log10(rec["target_aep"])).min()
+        got = abs(np.log10(rec["aep_rain"]) - np.log10(rec["target_aep"]))
+        assert got == pytest.approx(nearest)
+        # and the record describes the event it points at
+        row = events.iloc[rec["index"]]
+        assert rec["aep_rain"] == pytest.approx(row["aep_rain"])
+        assert rec["q_peak"] == pytest.approx(row["q_peak"])
+
+
+def test_retention_reaches_rare_events_not_just_the_first_simulated():
+    """The old rule kept every 37th event, so it never left the frequent end."""
+    res = _retention_run()
+    kept = res.hydrographs[12.0]
+    assert min(r["aep_rain"] for r in kept) <= 0.02
+    # rarer rainfall, deeper burst
+    depths = [r["depth_mm"] for r in kept]
+    assert depths == sorted(depths)
+
+
+def test_store_hydrographs_zero_retains_none():
+    assert _retention_run(store=0).hydrographs[12.0] == []
+
+
+def test_store_hydrographs_caps_the_targets_kept():
+    kept = _retention_run(store=2).hydrographs[12.0]
+    assert [r["target_aep"] for r in kept] == [0.5, 0.2]

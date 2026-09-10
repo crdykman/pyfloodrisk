@@ -62,7 +62,7 @@ def main():
     cfg = MCSConfig(area_km2=area, durations_h=DURATIONS_H, dt_hours=1.0,
                     tail_multiple=2.0, tail_min_hours=36.0,
                     preburst=PreBurstSampler(fixed_ratio=0.0),   # off here
-                    store_hydrographs=24, seed=20260909)
+                    store_hydrographs=24, seed=20260909)   # one per target AEP
 
     print(f"{STATION}: {area:.0f} km2, {len(state_table)} donor states, "
           f"{len(DURATIONS_H)} durations x {strat.n_events} events "

@@ -64,11 +64,9 @@ __all__ = [
 #: The demo station used when none is named.
 DEMO_STATION = "117002A"
 
-#: Plausible-but-uncalibrated GR4H parameters, so the demo runs without a
-#: calibration step.  Calibrate before reading anything into the numbers.
 DEMO_PARAMETERS: dict[str, dict[str, float]] = {
-    "117002A": {"ps0": 0.5, "rs0": 0.5, "x1": 350.0, "x2": -0.8,
-                "x3": 60.0, "x4": 6.0},
+    "117002A": {"ps0": 0.5, "rs0": 0.5, "x1": 7.67458, "x2": -9.52235,
+                "x3": 26.5717, "x4": 40.5907},
     "405214": {"ps0": 0.5, "rs0": 0.5, "x1": 1469.93, "x2": -8.48264,
                "x3": 210.0908, "x4": 16.6404},
 }
@@ -164,10 +162,13 @@ def continuous_state_table(
         "q_cumecs": out["qt_cumecs"],
         "prec_next": prec_next,
     })
-    for j in range(out["uh1"].shape[1]):
-        table[f"uh1_{j}"] = out["uh1"][:, j]
-    for j in range(out["uh2"].shape[1]):
-        table[f"uh2_{j}"] = out["uh2"][:, j]
+    # built in one concat rather than column by column: a long x4 means a
+    # long unit hydrograph, and inserting 120-odd columns one at a time
+    # fragments the frame badly
+    uh = {f"uh1_{j}": out["uh1"][:, j] for j in range(out["uh1"].shape[1])}
+    uh.update({f"uh2_{j}": out["uh2"][:, j]
+               for j in range(out["uh2"].shape[1])})
+    table = pd.concat([table, pd.DataFrame(uh, index=table.index)], axis=1)
 
     keep = np.zeros(n, dtype=bool)
     keep[int(warmup_hours):] = True

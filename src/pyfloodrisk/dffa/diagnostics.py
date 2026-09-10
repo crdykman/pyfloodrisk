@@ -400,21 +400,37 @@ def plot_convergence(results, aeps=(0.01, 0.001), n_rep=5, ax=None):
     return ax
 
 
-def plot_hydrographs(results, duration_h=None, n=8, ax=None):
-    """A handful of simulated events, to confirm the model is behaving."""
+def plot_hydrographs(results, duration_h=None, n=None, ax=None):
+    """One simulated event per target rainfall AEP, frequent to rare.
+
+    The events are those retained by :attr:`MCSConfig.hydrograph_aeps`, so
+    the figure spans the design range rather than whichever events happened
+    to be simulated first.  Each line is labelled with the *sampled*
+    rainfall AEP, which is the one nearest the target rather than the
+    target itself.
+
+    Note these are single realisations: the state and the temporal pattern
+    were drawn at random for each, so one line being above another is not
+    evidence about the design flood -- read that off the frequency curve.
+    """
     apply_style()
     duration_h = duration_h or results.durations[len(results.durations) // 2]
-    kept = list(results.hydrographs.get(float(duration_h), []))[:n]
+    kept = list(results.hydrographs.get(float(duration_h), []))
+    if n is not None:
+        kept = kept[:n]
     if not kept:
         raise ValueError("no hydrographs retained; set MCSConfig.store_hydrographs > 0")
     ax = ax or plt.subplots(figsize=(6.8, 4.0))[1]
     dt = results.config.dt_hours
     cols = ordinal_colours(len(kept))
-    for c, (idx, rain, q) in zip(cols, kept):
-        ax.plot(np.arange(q.size) * dt, q, color=c, linewidth=1.3)
+    for c, rec in zip(cols, kept):
+        q = rec["q"]
+        ax.plot(np.arange(q.size) * dt, q, color=c, linewidth=1.3,
+                label=f"{rec['aep_rain']:.3g} AEP  (1 in {1 / rec['aep_rain']:.0f} y)")
     ax.set_xlabel("Time from start of event (h)")
     ax.set_ylabel("Discharge (m$^3$ s$^{-1}$)")
-    ax.set_title(f"Simulated hydrographs, {duration_h:g} h storms")
+    ax.set_title(f"Simulated hydrographs by rainfall AEP, {duration_h:g} h storms")
+    ax.legend(title="rainfall AEP", fontsize="small", frameon=False)
     ax.figure.tight_layout()
     return ax
 

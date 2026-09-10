@@ -140,8 +140,14 @@ class InitialStateSampler:
         Kernel bandwidth multiplier (``smoothed`` jitter, and the ``Kde1d``
         multiplier for the KDE-based methods).  1.0 is the automatic choice.
     marginals
-        ``"kde"`` (default) or ``"empirical"`` -- how the copula methods invert
-        each margin.
+        ``"kde"`` (default) or ``"empirical"`` -- how ``empirical_copula``
+        inverts each margin.  It has no effect on any other method:
+        ``bootstrap`` and ``smoothed`` draw whole donor rows, and
+        ``independent_kde`` is defined by its kernel densities, so all three
+        ignore it.  It is not a minor knob for the copula: on the demo
+        catchment, switching the copula to empirical margins moves the 0.2%
+        AEP quantile by about 12%, more than destroying the dependence
+        structure does.
     uh_profile
         How the UH memory shape is set for the non-bootstrap methods:
         ``"scaled_donor"`` (default) takes the nearest donor's profile and
