@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfloodrisk"
-version = "0.2.0"
+version = "0.2.1"
 description = "Flood Risk Assessment Workflow for GR4H-Based Design Flood Analysis"
 readme = "README.md"
 license = { text = "MIT" }
@@ -40,6 +40,11 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "pyfloodrisk.data" = ["**/*"]
+
+# "**/*" above would otherwise sweep up compiled bytecode left in the source
+# tree, which is interpreter-version specific and has no business in a wheel.
+[tool.setuptools.exclude-package-data]
+"pyfloodrisk.data" = ["**/__pycache__/*", "**/*.pyc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
