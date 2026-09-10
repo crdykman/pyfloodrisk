@@ -13,9 +13,10 @@ from streamflow calibration through to design flood simulation:
   behavioural posterior against design storm events
   (`calibration`, `behavioural_posterior`, `robust_calibration`).
 - **Event delineation** — baseflow separation and hydrologic event
-  extraction (peaks-over-threshold or local maxima), used to derive
-  antecedent model states ahead of each event (`hydro_event_pipeline`,
-  `extract_initial_states`).
+  extraction (peaks-over-threshold or local maxima), trimmed to the
+  largest events per year by peak flow or volume (6 EY by default), and
+  used to derive antecedent model states ahead of each event
+  (`hydro_event_pipeline`, `extract_initial_states`).
 - **Design storms** — builds design storms from temporal-pattern
   increment files (`build_design_storm`).
 - **Design flood simulation** — runs GR4H forward across design storm

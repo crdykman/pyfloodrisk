@@ -171,8 +171,15 @@ table = event_onset_states(continuous_state_table(forcings, params, AREA))
 delineation over the continuous run's discharge and keeps the antecedent state
 ahead of each delineated event — the same operation `extract_initial_states`
 performs for the single-event workflow, so the two paths condition on the same
-thing. It is a far smaller pool (one row per event rather than per hour), so it
-is the case where the smoothed and copula methods earn their keep. Conditioning
+thing. Delineation finds every rise, most of which are not floods, so the
+events are then trimmed to an exceedance-per-year rate — by default the 6
+largest per year of record (`ey=6`), ranked on peak flow or on event volume
+(`rank_by="peak"` or `"volume"`); `ey=None` keeps the lot. On the bundled demo
+station that is the difference between 220 rises and 33 events, and it roughly
+doubles the median antecedent production store (73 → 142 mm), which is the
+whole point: big events start on wet catchments. It is a far smaller pool (one
+row per event rather than per hour), so it is the case where the smoothed and
+copula methods earn their keep. Conditioning
 on rainfall or on events makes the pool wetter, and the design flood larger;
 which is right depends on whether you also prepend pre-burst rainfall — do one
 or the other, not both.

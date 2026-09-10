@@ -178,7 +178,9 @@ def event_onset_states(state_table: pd.DataFrame,
                        event_method: str = "maxima",
                        method_kwargs: Mapping[str, Any] | None = None,
                        pre_event: int = 24,
-                       alpha: float = 0.925) -> pd.DataFrame:
+                       alpha: float = 0.925,
+                       ey: float | None = 6.0,
+                       rank_by: str = "peak") -> pd.DataFrame:
     """Restrict a state table to the onset of each simulated flood event.
 
     Runs the package's event delineation
@@ -202,6 +204,12 @@ def event_onset_states(state_table: pd.DataFrame,
         hourly values.
     event_method, method_kwargs, alpha :
         Passed to :func:`~pyfloodrisk.hydro_event_pipeline`.
+    ey, rank_by :
+        Also passed to :func:`~pyfloodrisk.hydro_event_pipeline`: keep the
+        ``ey`` largest events per year of record, ranked on peak flow or
+        event volume.  The default of 6 EY makes the donor pool the events
+        a partial duration series would keep; ``ey=None`` restores every
+        delineated rise, which is a much larger and much tamer pool.
     pre_event :
         Hours ahead of each peak to search for the onset; passed to
         :func:`~pyfloodrisk.extract_initial_states`.
@@ -221,7 +229,7 @@ def event_onset_states(state_table: pd.DataFrame,
     _, events = hydro_event_pipeline(
         state_table["q_cumecs"].to_numpy(float), event_method=event_method,
         method_kwargs=dict(method_kwargs) if method_kwargs else None,
-        alpha=alpha)
+        alpha=alpha, ey=ey, rank_by=rank_by, dt_hours=1.0)
     if events.empty:
         raise ValueError("event delineation found no events in the run")
 

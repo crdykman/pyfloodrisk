@@ -5,6 +5,11 @@ Lyne-Hollick recursive digital filter, event delineation by either a
 peaks-over-threshold (POT) or local-maxima method, and extraction of
 antecedent model states at each delineated event for design flood
 simulation.
+
+Delineation finds every rise in the series, most of which are not floods,
+so :func:`hydro_event_pipeline` trims the list to an exceedance-per-year
+rate -- by default the six largest events per year of record, ranked on
+peak flow or on event volume (:func:`threshold_events_by_ey`).
 """
 
 import numpy as np
@@ -266,8 +271,75 @@ def event_maxima(data, delta_y=200, delta_x=1, threshold=-1):
     return pd.DataFrame(final_output)
 
 
+#: Mean hours in a year, for converting a record length to years.
+_HOURS_PER_YEAR = 365.25 * 24.0
+
+#: Event metric each ``rank_by`` option ranks on.
+_RANK_COLUMNS = {"peak": "max", "volume": "sum"}
+
+
+def threshold_events_by_ey(
+    events_summary, n_timesteps, ey=6.0, rank_by="peak", dt_hours=1.0
+):
+    """Keep the largest events, ``ey`` of them per year of record on average.
+
+    Delineation returns every rise it can find, most of which are far too
+    small to be floods.  This trims the list to an exceedance-per-year (EY)
+    rate: ``ey=6`` keeps the six largest events per year of record, which is
+    the usual starting point for a partial duration series.
+
+    Parameters
+    ----------
+    events_summary : DataFrame
+        Delineated events, as returned by :func:`event_POT` or
+        :func:`event_maxima`.
+    n_timesteps : int
+        Length of the series the events were delineated from; with
+        ``dt_hours`` this gives the record length in years.
+    ey : float or None, optional
+        Events to keep per year of record. ``None`` keeps every event.
+        Default 6.0.
+    rank_by : {"peak", "volume"}, optional
+        Rank events on peak flow (the ``max`` column) or event volume (the
+        ``sum`` column). Because the series is evenly spaced, ``sum`` is
+        proportional to volume, so no unit conversion is needed to rank on
+        it. Default ``"peak"``.
+    dt_hours : float, optional
+        Timestep of the series, in hours. Default 1.0.
+
+    Returns
+    -------
+    DataFrame
+        The retained events in chronological order, with a reset index.
+        Ranking is by the chosen metric, ties broken by earlier ``start``.
+        Returns fewer rows than asked for if delineation found fewer.
+    """
+    if rank_by not in _RANK_COLUMNS:
+        raise ValueError(
+            f"rank_by must be one of {sorted(_RANK_COLUMNS)}, got {rank_by!r}"
+        )
+    if ey is None:
+        return events_summary.reset_index(drop=True)
+    if ey <= 0:
+        raise ValueError("ey must be positive, or None to keep every event")
+    if events_summary.empty:
+        return events_summary.reset_index(drop=True)
+
+    n_years = float(n_timesteps) * float(dt_hours) / _HOURS_PER_YEAR
+    n_keep = max(1, int(round(ey * n_years)))
+    if n_keep >= len(events_summary):
+        return events_summary.reset_index(drop=True)
+
+    column = _RANK_COLUMNS[rank_by]
+    kept = events_summary.sort_values(
+        [column, "start"], ascending=[False, True]
+    ).head(n_keep)
+    return kept.sort_values("start").reset_index(drop=True)
+
+
 def hydro_event_pipeline(
-    q_array, event_method="maxima", method_kwargs=None, alpha=0.925, passes=3, r=30
+    q_array, event_method="maxima", method_kwargs=None, alpha=0.925, passes=3, r=30,
+    ey=6.0, rank_by="peak", dt_hours=1.0,
 ):
     """Run baseflow separation followed by event delineation on quickflow.
 
@@ -282,13 +354,25 @@ def hydro_event_pipeline(
         (:func:`event_POT` or :func:`event_maxima`).
     alpha, passes, r :
         Passed through to :func:`baseflow_b`.
+    ey : float or None, optional
+        Keep only the largest events, ``ey`` of them per year of record on
+        average. Default 6.0, i.e. the six largest events per year; pass
+        ``None`` to keep every delineated event. See
+        :func:`threshold_events_by_ey`.
+    rank_by : {"peak", "volume"}, optional
+        Whether "largest" means largest peak flow or largest event volume.
+        Default ``"peak"``.
+    dt_hours : float, optional
+        Timestep of ``q_array`` in hours, used to convert its length to
+        years. Default 1.0 (hourly).
 
     Returns
     -------
     df_processed : DataFrame
         Columns ``baseflow`` and ``quickflow`` (same length as q_array).
     events_summary : DataFrame
-        Delineated events; see :func:`event_POT`/:func:`event_maxima`.
+        The retained events in chronological order, with a reset index;
+        see :func:`event_POT`/:func:`event_maxima` for the columns.
     """
     if method_kwargs is None:
         method_kwargs = {}
@@ -319,6 +403,14 @@ def hydro_event_pipeline(
         )
     else:
         raise ValueError("Invalid event_method selection. Use 'POT' or 'maxima'.")
+
+    # Step 3: Keep only the largest events, on average `ey` per year.  The
+    # index is reset here because extract_initial_states looks its rows up
+    # by label.
+    events_summary = threshold_events_by_ey(
+        events_summary, len(df_processed), ey=ey, rank_by=rank_by,
+        dt_hours=dt_hours,
+    )
 
     return df_processed, events_summary
 
