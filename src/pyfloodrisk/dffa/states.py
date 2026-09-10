@@ -1,11 +1,11 @@
 """
 Sampling GR4H initial states from a continuous simulation.
 
-This is the part of the framework that replaces the sampled initial loss of the
-RORB Monte Carlo implementation.  The input is a table of model states written
-out at every timestep (or every storm onset) of a long continuous GR4H run:
-production store, routing store, and optionally the unit-hydrograph memory and
-exponential store.
+This is the part of the framework that replaces the sampled initial loss of a
+conventional event-based Monte Carlo implementation.  The input is a table of
+model states written out at every timestep (or every storm onset) of a long
+continuous GR4H run: production store, routing store, and optionally the
+unit-hydrograph memory and exponential store.
 
 Modelled variables
 ------------------
@@ -42,11 +42,6 @@ Methods
     assumed, so unlike a Gaussian copula it can represent asymmetric and
     tail dependence -- which matters here, because the design flood comes from
     the joint upper tail of the state distribution.
-``"gaussian_copula"``
-    Gaussian copula with the same marginals.  Kept because ``corr_override``
-    makes it a clean sensitivity tool: it changes the dependence while leaving
-    every marginal untouched.  It has no tail dependence, so it is a
-    comparison, not a production default.
 ``"independent_kde"``
     Each state variable sampled independently from its own boundary-corrected
     one-dimensional kernel density (``pyvinecopulib.Kde1d``, which handles the
@@ -79,8 +74,7 @@ __all__ = ["InitialStateSampler", "PETClimatology", "UH_TOTAL", "have_pyvinecopu
 #: Name of the derived state variable holding total UH memory (mm).
 UH_TOTAL = "uh_total"
 
-_METHODS = ("bootstrap", "smoothed", "empirical_copula", "gaussian_copula",
-            "independent_kde")
+_METHODS = ("bootstrap", "smoothed", "empirical_copula", "independent_kde")
 
 
 def have_pyvinecopulib() -> bool:
@@ -141,7 +135,7 @@ class InitialStateSampler:
         selecting climatological PET.
     method
         One of ``bootstrap``, ``smoothed``, ``empirical_copula``,
-        ``gaussian_copula``, ``independent_kde``.
+        ``independent_kde``.
     bandwidth
         Kernel bandwidth multiplier (``smoothed`` jitter, and the ``Kde1d``
         multiplier for the KDE-based methods).  1.0 is the automatic choice.
@@ -157,9 +151,6 @@ class InitialStateSampler:
     model_uh_total
         Include ``uh_total`` among the modelled state variables (default True
         when UH columns are supplied).
-    corr_override
-        Correlation matrix for ``gaussian_copula``, ordered as
-        :attr:`state_vars`.
     """
 
     states: pd.DataFrame
@@ -176,7 +167,6 @@ class InitialStateSampler:
     marginals: str = "kde"
     uh_profile: str = "scaled_donor"
     model_uh_total: bool = True
-    corr_override: np.ndarray | None = None
 
     def __post_init__(self):
         df = self.states.reset_index(drop=True).copy()
@@ -341,19 +331,10 @@ class InitialStateSampler:
             U = rng.random((n, d))          # independent across variables
             Xnew = np.column_stack([f.quantile(np.ascontiguousarray(U[:, j]))
                                     for j, f in enumerate(fits)])
-        elif self.method == "empirical_copula":
+        else:  # empirical_copula
             vc = self._vine(idx)
             seeds = [int(s) for s in rng.integers(1, 2 ** 31 - 1, size=4)]
             U = np.asarray(vc.simulate(int(n), seeds=seeds))
-            Xnew = self._invert_marginals(U, idx)
-        else:  # gaussian_copula
-            from scipy.stats import norm as _norm
-            u = _pseudo_obs(self._X[idx])
-            scores = _norm.ppf(u)
-            C = (np.atleast_2d(self.corr_override) if self.corr_override is not None
-                 else np.corrcoef(scores.T))
-            L = np.linalg.cholesky(C + 1e-9 * np.eye(d))
-            U = _norm.cdf(rng.normal(size=(n, d)) @ L.T)
             Xnew = self._invert_marginals(U, idx)
 
         Xnew = self._clip(Xnew)
