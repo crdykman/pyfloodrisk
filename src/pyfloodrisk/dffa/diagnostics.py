@@ -28,7 +28,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
-from .tpt import weighted_quantile
+from .tpt import interval_quantile
 
 __all__ = [
     "PALETTE", "apply_style", "probability_axis",
@@ -359,8 +359,10 @@ def plot_state_sensitivity(results, aep=0.01, n_bins=4, fig=None):
         n_sub = sub.groupby("stratum")["q_peak"].size()
         w = (sub["weight"] * sub["stratum"].map(n_full)
              / sub["stratum"].map(n_sub)).to_numpy()
-        ax2.plot(_zx(aeps), np.atleast_1d(weighted_quantile(
-                     sub["q_peak"].to_numpy(), w, aeps)),
+        ax2.plot(_zx(aeps), np.atleast_1d(interval_quantile(
+                     sub["q_peak"].to_numpy(), w,
+                     sub["stratum"].to_numpy(int), sub["kind"].to_numpy(int),
+                     aeps, first_factor=results.first_factor)),
                  color=cols[i], linewidth=1.7,
                  label=f"store {100*i/n_bins:.0f}-{100*(i+1)/n_bins:.0f}th pct")
     ax2.set_yscale("log")

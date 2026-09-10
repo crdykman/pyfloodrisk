@@ -97,22 +97,30 @@ P(Q > q) = Σ_k p[R_k] · P(Q > q | R_k),    P(Q > q | R_k) ≈ n_k(q) / N_k
 and inverted (linearly in log P) to give quantiles. Design quantiles are the
 envelope over storm durations, with the critical duration recorded at each AEP.
 
-The conditional exceedance probability inside an interval is a **plotting
-position** rather than the raw `n/N`:
+The conditional exceedance probability inside an interval is the **raw
+proportion**, with no plotting position:
 
 ```
-P(Q > q | R_k) = (n_k(q) - a) / (N_k + 1 - 2a)
+P(Q > q | R_k) = n_k(q) / N_k
 ```
 
-with **Cunnane's a = 0.4** the default (`plotting_position="cunnane"`), since it
-is approximately quantile-unbiased across the distributions used in flood
-frequency work. `"hazen"` (0.5), `"weibull"` (0), `"gringorten"` (0.44),
-`"blom"`, `"beard"`, `"apl"` and bare floats are accepted. Two details: it is
-applied *within* each interval and forced to zero where no simulation in the
-interval exceeds `q`, so it introduces no probability floor in the far tail;
-and the pooled (`estimator="truncated"`) form uses the weight-generalised
-version of the same family, `P_i = W(C_i - a·w_i)/(W + (1-2a)·w_i)`, which
-reduces exactly to `(i-a)/(n+1-2a)` for equal weights.
+— of the `N_k` events simulated in interval *k*, the `n_k(q)` whose peak
+exceeds `q`. A plotting position is a device for assigning probabilities to
+*ranked observations* drawn from an unknown distribution; inside a stratum
+neither condition holds. The interval is sampled by design, `N_k` is chosen
+rather than given, and every event in it carries the same weight, so `n/N` is
+already the unbiased estimate of the conditional probability the total
+probability theorem asks for. It is 0 where nothing in the interval exceeds
+`q` and 1 where everything does, so the curve neither floors nor caps
+artificially.
+
+**This is the only estimator.** There is no pooled alternative that ranks the
+simulated peaks as one sample: the events come from *stratified* sampling and
+carry unequal weights by design, so pooling would throw away the structure
+that gives each event its weight, and it could not represent the open end
+intervals at all. Everything downstream — quantiles, the exceedance inverse,
+stratum contributions, the bootstrap confidence limits — goes through the
+interval-wise form.
 
 **End intervals are treated as ARR specifies**, so the probability domain is
 closed rather than truncated:
@@ -124,15 +132,17 @@ closed rather than truncated:
 | rainfall | held at `edges[0]` | held at `edges[-1]` |
 | conditional exceedance | geometric mean of `c` and `0.1·c` = `c·√0.1` | geometric mean of `c` and 1 = `√c` |
 
-The interval masses then sum to exactly 1. `Stratification(open_ends=False)` and
-`DFFAResults(estimator="truncated")` give the plain truncated scheme instead,
-where the masses sum to `edges[0] - edges[-1]` and the curve is undefined
-outside that range.
+The interval masses then sum to exactly 1. `Stratification(open_ends=False)`
+gives the plain truncated scheme instead, where every interval is interior, the
+masses sum to `edges[0] - edges[-1]` and the curve is undefined outside that
+range.
 
-`tests/test_dffa.py` holds two analytical checks: substituting the identity
-map for GR4H must reproduce the rainfall frequency curve exactly (through both
-estimators), and the two geometric-mean rules are checked directly. Those are
-the tests to keep running as you modify things.
+`tests/test_dffa.py` holds the analytical checks: substituting the identity map
+for GR4H must reproduce the rainfall frequency curve exactly — verified on both
+the open-ended and the truncated stratification — the conditional exceedance
+inside an interval is pinned to `n/N` at both ends of its range, and the two
+geometric-mean rules are checked directly. Those are the tests to keep running
+as you modify things.
 
 ### Check the boundary is actually where ARR assumes it is
 

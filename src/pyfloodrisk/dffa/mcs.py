@@ -17,9 +17,11 @@ Structure of one simulated event
 7. GR4H is run over the burst plus a recession tail; the peak discharge is
    retained.
 
-The flood frequency curve is then the weighted empirical exceedance function of
-the simulated peaks (total probability theorem), and the design quantile at each
-AEP is the envelope over durations.
+The flood frequency curve is then assembled from the simulated peaks interval
+by interval through the total probability theorem -- each rainfall interval
+contributing its probability mass times the proportion of its own simulations
+that exceed the threshold -- and the design quantile at each AEP is the
+envelope over durations.
 
 What this framework does and does not assume
 --------------------------------------------
@@ -52,10 +54,9 @@ from .ifd import IFDCurve
 from .patterns import PreBurstSampler, TemporalPatternLibrary
 from .states import InitialStateSampler, PETClimatology
 from .stratification import FREQUENT_OPEN, RARE_OPEN, Stratification
-from .tpt import (ARR_FIRST_FACTOR, DEFAULT_PLOTTING_POSITION, bootstrap_quantiles, exceedance_probability,
+from .tpt import (ARR_FIRST_FACTOR, bootstrap_quantiles,
                   interval_exceedance_curve, interval_exceedance_probability,
-                  interval_quantile, stratum_contribution, weighted_exceedance,
-                  weighted_quantile)
+                  interval_quantile, stratum_contribution)
 
 __all__ = ["MCSConfig", "DerivedFFA", "DFFAResults", "STANDARD_DURATIONS_H"]
 
@@ -261,20 +262,18 @@ class DerivedFFA:
 class DFFAResults:
     """Simulated events and the estimators built on them.
 
-    ``estimator`` selects how the total probability theorem is applied:
+    The total probability theorem is applied **interval by interval**, as ARR
+    Book 4 Section 4.3.3.3 writes it: each rainfall interval contributes its
+    probability mass times the raw proportion ``n/N`` of its own simulations
+    that exceed the threshold.  With ``open_ends`` stratification the frequent
+    and rare open intervals carry the remaining mass and their conditional
+    exceedance probabilities are replaced by geometric means, so the interval
+    masses sum to 1.
 
-    ``"arr"`` (default)
-        Interval-wise, with the ARR Book 4 Section 4.3.3.3 end-interval
-        closure -- the open frequent and rare intervals carry the remaining
-        probability mass and their conditional exceedance probabilities are
-        replaced by geometric means.  Interval masses sum to 1.
-    ``"truncated"``
-        Pooled weighted empirical exceedance function over the sampled range
-        only.  Simpler; the curve is undefined outside
-        ``[edges[-1], edges[0]]``.
-
-    ``plotting_position`` is Cunnane's ``a = 0.4`` by default; see
-    :mod:`pyfloodrisk.dffa.tpt` for the family and the weighted generalisation.
+    There is deliberately no pooled estimator.  The events come from
+    stratified sampling, so they carry unequal weights by design; ranking them
+    as one pooled sample would throw that structure away and could not
+    represent the open ends at all.  See :mod:`pyfloodrisk.dffa.tpt`.
     """
 
     events: pd.DataFrame
@@ -286,8 +285,6 @@ class DFFAResults:
     #: nearest that target), ``index``, ``duration_h``, ``depth_mm``,
     #: ``q_peak``, ``rain`` and ``q``.
     hydrographs: Mapping[float, list] = field(default_factory=dict)
-    estimator: str = "arr"
-    plotting_position: str | float = DEFAULT_PLOTTING_POSITION
     first_factor: float = ARR_FIRST_FACTOR
 
     # --------------------------------------------------------------- basics
@@ -308,20 +305,15 @@ class DFFAResults:
     def exceedance_curve(self, duration_h: float):
         """``(discharge, annual exceedance probability)`` for one duration."""
         q, w, iv, kd = self._arrays(duration_h)
-        if self.estimator == "arr":
-            grid, P, _ = interval_exceedance_curve(
-                q, w, iv, kd, plotting_position=self.plotting_position,
-                first_factor=self.first_factor)
-            return grid, P
-        return weighted_exceedance(q, w)
+        grid, P, _ = interval_exceedance_curve(
+            q, w, iv, kd, first_factor=self.first_factor)
+        return grid, P
 
     # ------------------------------------------------------------ quantiles
     def _quantile(self, duration_h: float, aeps) -> np.ndarray:
         q, w, iv, kd = self._arrays(duration_h)
-        if self.estimator == "arr":
-            return interval_quantile(q, w, iv, kd, aeps, self.plotting_position,
-                                     self.first_factor)
-        return np.atleast_1d(weighted_quantile(q, w, aeps))
+        return interval_quantile(q, w, iv, kd, aeps,
+                                 first_factor=self.first_factor)
 
     def quantiles(self, aeps: Sequence[float]) -> pd.DataFrame:
         """Quantiles (m3/s) for every duration; columns are durations."""
@@ -389,21 +381,15 @@ class DFFAResults:
             kk.append(kd)
             offset += int(iv.max()) + 1
         aeps = np.atleast_1d(np.asarray(aeps, float))
-        if self.estimator == "arr":
-            vals = interval_quantile(np.concatenate(qq), np.concatenate(ww),
-                                     np.concatenate(ii), np.concatenate(kk),
-                                     aeps, self.plotting_position, self.first_factor)
-        else:
-            vals = np.atleast_1d(weighted_quantile(
-                np.concatenate(qq), np.concatenate(ww), aeps))
+        vals = interval_quantile(np.concatenate(qq), np.concatenate(ww),
+                                 np.concatenate(ii), np.concatenate(kk),
+                                 aeps, first_factor=self.first_factor)
         return pd.Series(vals, index=pd.Index(aeps, name="aep"), name="q_peak")
 
     def exceedance_of(self, discharge: float, duration_h: float) -> float:
         q, w, iv, kd = self._arrays(duration_h)
-        if self.estimator == "arr":
-            return interval_exceedance_probability(
-                q, w, iv, kd, discharge, self.plotting_position, self.first_factor)
-        return exceedance_probability(q, w, discharge)
+        return interval_exceedance_probability(
+            q, w, iv, kd, discharge, first_factor=self.first_factor)
 
     # --------------------------------------------------------- uncertainty
     def confidence(self, aeps, n_boot: int = 500, level: float = 0.90,
@@ -420,8 +406,7 @@ class DFFAResults:
         def boot(d, targets):
             q, w, iv, kd = self._arrays(d)
             return bootstrap_quantiles(q, w, iv, targets, kd, n_boot, rng,
-                                       self.estimator, self.plotting_position,
-                                       self.first_factor)
+                                       first_factor=self.first_factor)
 
         if duration_h is not None:
             b = boot(duration_h, aeps)
@@ -452,8 +437,8 @@ class DFFAResults:
             q, w, iv, kd = self._arrays(d)
             qa = (float(env.loc[a, "q_peak"]) if duration_h is None
                   else float(np.atleast_1d(self._quantile(d, [a]))[0]))
-            rows[a] = stratum_contribution(q, w, iv, qa, kd, self.plotting_position,
-                                           self.first_factor)
+            rows[a] = stratum_contribution(q, w, iv, qa, kd,
+                                           first_factor=self.first_factor)
         out = pd.DataFrame(rows).T
         out.index.name = "aep"
         out.columns.name = "interval"
@@ -483,7 +468,7 @@ class DFFAResults:
                 continue
             q, w, iv, kd = self._arrays(d)
             c = stratum_contribution(q, w, iv, float(env.loc[a, "q_peak"]), kd,
-                                     self.plotting_position, self.first_factor)
+                                     first_factor=self.first_factor)
             ids = np.unique(iv)
             kind_of = {int(k): int(kd[iv == k][0]) for k in ids}
             rows[a] = dict(
@@ -520,7 +505,6 @@ class DFFAResults:
                     keep.append(g)
                 sub = pd.concat(keep, ignore_index=True)
                 env = DFFAResults(sub, self.config, self.stratification, {},
-                                  self.estimator, self.plotting_position,
                                   self.first_factor).envelope(aeps)
                 n_eff = int(round(f * self.stratification.n_per_interval.mean()))
                 for a in aeps:
@@ -536,7 +520,7 @@ class DFFAResults:
         ci = self.confidence(aeps)
         env["lower_90"] = ci["lower"]
         env["upper_90"] = ci["upper"]
-        if self.estimator == "arr" and self.stratification.open_ends:
+        if self.stratification.open_ends:
             ends = self.end_interval_contributions(aeps)
             env["end_share"] = ends.sum(axis=1)
         return env

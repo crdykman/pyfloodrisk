@@ -75,28 +75,35 @@ def test_arr_open_ends_close_the_probability_domain():
     assert k[freq].max() == 0 and k[rare].min() == 26
 
 
-def test_tpt_recovers_analytical_quantiles():
-    """Identity model: the derived curve must equal the rainfall curve."""
+def test_tpt_recovers_analytical_quantiles_on_a_closed_domain():
+    """Identity model: the derived curve must equal the rainfall curve.
+
+    The companion of ``test_arr_estimator_recovers_analytical_quantiles``,
+    on a *truncated* stratification (``open_ends=False``), where every
+    interval is interior and no geometric-mean end rule applies.
+    """
     s = Stratification.uniform_in_z(aep_max=0.5, aep_min=1e-7, n_strata=60,
                                     n_per_stratum=100, open_ends=False)
     aep, w, k, kind = s.sample(np.random.default_rng(1))
     # "discharge" = a strictly increasing function of the rainfall variate
     q = 10.0 * norm.ppf(1 - aep) + 100.0
     for target in (0.1, 0.01, 0.001, 1e-4, 1e-5):
-        got = tpt.weighted_quantile(q, w, target)
+        got = float(tpt.interval_quantile(q, w, k, kind, [target])[0])
         want = 10.0 * norm.ppf(1 - target) + 100.0
         assert abs(got - want) < 0.02 * abs(want - 100.0) + 0.05, (target, got, want)
 
 
 def test_exceedance_and_quantile_are_inverses():
+    """The interval-wise curve must invert consistently in both directions."""
     rng = np.random.default_rng(3)
     s = Stratification.uniform_in_z(n_strata=20, n_per_stratum=50,
                                     open_ends=False)
     aep, w, k, kind = s.sample(rng)
     q = np.exp(norm.ppf(1 - aep))
     for target in (0.05, 0.01, 0.002):
-        qq = tpt.weighted_quantile(q, w, target)
-        assert np.isclose(tpt.exceedance_probability(q, w, qq), target, rtol=0.05)
+        qq = float(tpt.interval_quantile(q, w, k, kind, [target])[0])
+        back = tpt.interval_exceedance_probability(q, w, k, kind, qq)
+        assert np.isclose(back, target, rtol=0.05), (target, qq, back)
 
 
 def test_stratum_contributions_sum_to_one():
@@ -127,11 +134,29 @@ def test_arr_estimator_recovers_analytical_quantiles():
         assert abs(got - want) < 0.03 * abs(want - 100.0) + 0.05, (target, got, want)
 
 
+def test_conditional_exceedance_inside_an_interval_is_raw_n_over_N():
+    """No plotting position inside an interval: P(Q>q|R_k) is exactly n/N."""
+    n = 50
+    q = np.arange(1.0, n + 1)                     # 1..50, one interior interval
+    w = np.full(n, 1.0 / n)
+    iv = np.zeros(n, int)
+    kind = np.zeros(n, int)                       # INTERIOR
+    grid = np.array([0.0, 10.5, 25.5, 40.5, 50.0])
+    _, P, contrib = tpt.interval_exceedance_curve(q, w, iv, kind, grid=grid)
+    # of the 50 events, the number strictly above each threshold, over 50
+    expected = np.array([50, 40, 25, 10, 0]) / n
+    assert np.allclose(contrib[0], expected)
+    assert np.allclose(P, expected)               # single interval of mass 1
+    # the ends are exact, not damped by a plotting position
+    assert P[0] == 1.0 and P[-1] == 0.0
+
+
 def test_arr_end_interval_geometric_means():
     """The two geometric-mean rules, checked against the closed form.
 
     Frequent open interval: P(Q>q|R_1) -> geometric mean of c and 0.1c, i.e.
     c*sqrt(0.1).  Rare open interval: geometric mean of c and 1, i.e. sqrt(c).
+    With the raw n/N conditional, c = 1 when every event exceeds.
     """
     n = 50
     q = np.full(2 * n, 10.0)
@@ -139,43 +164,32 @@ def test_arr_end_interval_geometric_means():
     iv = np.concatenate([np.zeros(n, int), np.ones(n, int)])
     kind = np.concatenate([np.full(n, 1), np.full(n, 2)])   # frequent, rare
     grid = np.array([1.0])                                  # every event exceeds
-    for pp in ("cunnane", "hazen", "weibull"):
-        a = tpt.plotting_position_a(pp)
-        c = (n - a) / (n + 1 - 2 * a)                       # all n exceed
-        _, P, contrib = tpt.interval_exceedance_curve(q, w, iv, kind, grid=grid,
-                                                      plotting_position=pp)
-        assert np.isclose(contrib[0, 0], 0.5 * c * np.sqrt(0.1)), pp
-        assert np.isclose(contrib[1, 0], 1.0 * np.sqrt(c)), pp
-        assert np.isclose(P[0], 0.5 * c * np.sqrt(0.1) + np.sqrt(c)), pp
+    _, P, contrib = tpt.interval_exceedance_curve(q, w, iv, kind, grid=grid)
+    c = 1.0                                                 # all n of N exceed
+    assert np.isclose(contrib[0, 0], 0.5 * c * np.sqrt(0.1))
+    assert np.isclose(contrib[1, 0], 1.0 * np.sqrt(c))
+    assert np.isclose(P[0], 0.5 * np.sqrt(0.1) + 1.0)
+    # half the events exceed: c = 0.5 exactly, no offset
+    q2 = np.concatenate([np.full(n // 2, 20.0), np.full(n // 2, 1.0)])
+    _, _, contrib2 = tpt.interval_exceedance_curve(
+        q2, w[:n], np.zeros(n, int), np.full(n, 2), grid=np.array([10.0]))
+    assert np.isclose(contrib2[0, 0], 0.5 * np.sqrt(0.5))
 
 
-def test_plotting_positions():
-    """Equal weights must reduce to the textbook (i - a)/(n + 1 - 2a)."""
-    n = 40
-    q = np.arange(n, dtype=float)
-    w = np.full(n, 1.0 / n)
-    i = np.arange(1, n + 1)
-    for name, a in tpt.PLOTTING_POSITIONS.items():
-        qs, p = tpt.weighted_exceedance(q, w, name)
-        assert np.allclose(p, (i - a) / (n + 1 - 2 * a)), name
-        assert np.all(np.diff(qs) < 0)
-    assert tpt.plotting_position_a("cunnane") == 0.4
-    assert tpt.DEFAULT_PLOTTING_POSITION == "cunnane"
-    with pytest.raises(ValueError):
-        tpt.plotting_position_a("gumbel")
-    with pytest.raises(ValueError):
-        tpt.plotting_position_a(0.8)
+def test_no_pooled_estimator_is_exposed():
+    """Stratified sampling only: pooling would discard the interval weights."""
+    for gone in ("weighted_exceedance", "weighted_quantile",
+                 "exceedance_probability", "plotting_position_a",
+                 "PLOTTING_POSITIONS", "DEFAULT_PLOTTING_POSITION"):
+        assert not hasattr(tpt, gone), gone
+        assert gone not in tpt.__all__
 
 
-def test_unequal_weight_plotting_position_stays_monotone():
-    rng = np.random.default_rng(0)
-    q = rng.random(200)
-    w = rng.random(200)
-    w /= w.sum() / 0.5                       # total mass 0.5
-    for pp in ("cunnane", "hazen"):
-        qs, p = tpt.weighted_exceedance(q, w, pp)
-        assert np.all(np.diff(p) > 0)
-        assert 0 < p[0] and p[-1] < 0.5
+def test_results_object_has_no_estimator_switch():
+    from pyfloodrisk.dffa import DFFAResults
+    fields = set(DFFAResults.__dataclass_fields__)
+    assert "estimator" not in fields
+    assert "plotting_position" not in fields
 
 
 # -------------------------------------------------------- temporal patterns

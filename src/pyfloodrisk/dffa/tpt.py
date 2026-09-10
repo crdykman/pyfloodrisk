@@ -9,45 +9,36 @@ the estimator interval-wise,
 
 with ``p[R_i]`` the width of interval *i* in the probability domain and
 ``P(Q > q | R_i)`` the proportion ``n/N`` of that interval's simulations whose
-peak exceeds ``q``.  Two estimators are provided:
+peak exceeds ``q``.
 
-:func:`interval_exceedance_curve` / :func:`interval_quantile`
-    The ARR form, interval by interval, **including the end-interval
-    treatment**: at the open ends the conditional exceedance probability is
-    replaced by a geometric mean, because the conditional probability varies
-    highly non-linearly across an unbounded interval.  For the frequent end it
-    is the geometric mean of ``c`` and ``first_factor·c`` (ARR suggests 0.1),
-    i.e. ``c·sqrt(first_factor)``; for the rare end, the geometric mean of
-    ``c`` and 1, i.e. ``sqrt(c)`` — the assumption being that as rainfall
-    becomes arbitrarily rare, exceedance of any given threshold becomes
-    certain.  This is the default.
+This is the only estimator here: the events come from *stratified* sampling of
+the rainfall probability domain, so they are combined interval by interval
+through the total probability theorem, never pooled and ranked as though they
+were one sample.  Pooling would discard the stratification that gives each
+event its weight, and it cannot represent the open end intervals at all.
 
-:func:`weighted_quantile` / :func:`weighted_exceedance`
-    The pooled weighted empirical exceedance function, which is what the
-    interval-wise form collapses to when every interval is closed and treated
-    identically.  Simpler, exact inside the sampled range, and truncated
-    outside it.  Used by the analytical unit test and available via
-    ``estimator="truncated"``.
+:func:`interval_exceedance_curve` / :func:`interval_quantile` implement the ARR
+form **including the end-interval treatment**: at the open ends the conditional
+exceedance probability is replaced by a geometric mean, because it varies
+highly non-linearly across an unbounded interval.  For the frequent end it is
+the geometric mean of ``c`` and ``first_factor·c`` (ARR suggests 0.1), i.e.
+``c·sqrt(first_factor)``; for the rare end, the geometric mean of ``c`` and 1,
+i.e. ``sqrt(c)`` -- the assumption being that as rainfall becomes arbitrarily
+rare, exceedance of any given threshold becomes certain.
 
 Conventions worth being explicit about:
 
-* **Plotting positions.**  The conditional exceedance probability inside an
-  interval is a plotting-position estimate rather than the raw ``n/N``:
+* **The conditional exceedance probability is the raw proportion**
 
-      P(Q > q | R_k) = (n_k(q) - a) / (N_k + 1 - 2a)
+      P(Q > q | R_k) = n_k(q) / N_k
 
-  with **Cunnane's a = 0.4** by default (approximately quantile-unbiased
-  across the distributions used in flood frequency work; Cunnane, 1978).
-  ``a = 0.5`` recovers Hazen, ``a = 0`` the Weibull form ``n/(N+1)``,
-  ``a = 0.44`` Gringorten.  It is applied *within* each interval, and is
-  forced to zero where no simulation in the interval exceeds ``q``, so it
-  never introduces a probability floor in the far tail.
-* The pooled estimator uses the weight-generalised form of the same family,
-
-      P_i = W (C_i - a w_i) / (W + (1 - 2a) w_i)
-
-  with ``C_i`` the cumulative weight and ``W`` the total.  For equal weights
-  this reduces exactly to ``(i - a)/(n + 1 - 2a)``.
+  of that interval's ``N_k`` simulations whose peak exceeds ``q``.  There is no
+  plotting position: a plotting position assigns probabilities to *ranked
+  observations* of unknown distribution, whereas here the interval is sampled
+  by design, ``N_k`` is chosen, and every event in it carries the same weight,
+  so ``n/N`` is already unbiased for the quantity wanted.  It is zero where
+  nothing in the interval exceeds ``q`` and one where everything does, so the
+  curve neither floors nor caps artificially.
 * Inversion is linear in ``log P`` against ``q``.
 """
 
@@ -58,12 +49,6 @@ import numpy as np
 from .stratification import FREQUENT_OPEN, INTERIOR, RARE_OPEN
 
 __all__ = [
-    "PLOTTING_POSITIONS",
-    "DEFAULT_PLOTTING_POSITION",
-    "plotting_position_a",
-    "weighted_exceedance",
-    "weighted_quantile",
-    "exceedance_probability",
     "interval_exceedance_curve",
     "interval_quantile",
     "interval_exceedance_probability",
@@ -73,82 +58,21 @@ __all__ = [
 
 ARR_FIRST_FACTOR = 0.1
 
-#: Plotting-position parameter ``a`` in ``(i - a) / (n + 1 - 2a)``.
-PLOTTING_POSITIONS = {
-    "cunnane": 0.4,       # approximately quantile-unbiased (Cunnane, 1978)
-    "hazen": 0.5,
-    "weibull": 0.0,       # i/(n+1), unbiased exceedance probability
-    "gringorten": 0.44,   # Gumbel/EV1
-    "blom": 0.375,        # normal
-    "beard": 0.31,
-    "apl": 0.35,          # APL / Landwehr
-}
-DEFAULT_PLOTTING_POSITION = "cunnane"
-
-
-def plotting_position_a(spec) -> float:
-    """Resolve a plotting-position name (or a bare ``a``) to the value of ``a``."""
-    if isinstance(spec, str):
-        try:
-            return PLOTTING_POSITIONS[spec.lower()]
-        except KeyError:
-            raise ValueError(
-                f"unknown plotting position '{spec}'; "
-                f"choose from {sorted(PLOTTING_POSITIONS)} or pass a float") from None
-    a = float(spec)
-    if not 0.0 <= a <= 0.5:
-        raise ValueError("plotting-position a must lie in [0, 0.5]")
-    return a
-
-
-# ------------------------------------------------------- pooled estimator
-def weighted_exceedance(q, w, plotting_position=DEFAULT_PLOTTING_POSITION):
-    """Sorted peaks (descending) and their annual exceedance probabilities.
-
-    Weight-generalised plotting position:
-    ``P_i = W (C_i - a w_i) / (W + (1 - 2a) w_i)``, which reduces to
-    ``(i - a)/(n + 1 - 2a)`` for equal weights.
-    """
-    q = np.asarray(q, dtype=float)
-    w = np.asarray(w, dtype=float)
-    if q.shape != w.shape:
-        raise ValueError("q and w must have the same shape")
-    a = plotting_position_a(plotting_position)
-    order = np.argsort(-q)
-    qs, ws = q[order], w[order]
-    W = ws.sum()
-    C = np.cumsum(ws)
-    return qs, W * (C - a * ws) / (W + (1.0 - 2.0 * a) * ws)
-
-
-def weighted_quantile(q, w, aep, plotting_position=DEFAULT_PLOTTING_POSITION):
-    """Discharge with the given annual exceedance probability (pooled form).
-
-    Values outside the simulated range come back as ``nan`` rather than being
-    extrapolated -- if you hit that, extend the stratification.
-    """
-    qs, p = weighted_exceedance(q, w, plotting_position)
-    aep = np.atleast_1d(np.asarray(aep, dtype=float))
-    out = np.interp(np.log(aep), np.log(p), qs, left=np.nan, right=np.nan)
-    return out if out.size > 1 else float(out[0])
-
-
-def exceedance_probability(q, w, discharge,
-                           plotting_position=DEFAULT_PLOTTING_POSITION):
-    """Annual exceedance probability of a nominated discharge (pooled form)."""
-    qs, p = weighted_exceedance(q, w, plotting_position)
-    discharge = np.atleast_1d(np.asarray(discharge, dtype=float))
-    out = np.interp(discharge, qs[::-1], p[::-1], left=p[-1], right=p[0])
-    return out if out.size > 1 else float(out[0])
-
 
 # --------------------------------------------- ARR interval-wise estimator
-def _interval_conditional(qs_sorted, grid, kind, a, first_factor):
-    """P(Q > grid | interval), with the ARR end-interval geometric means."""
+def _interval_conditional(qs_sorted, grid, kind, first_factor):
+    """P(Q > grid | interval), with the ARR end-interval geometric means.
+
+    The conditional probability is the raw proportion ``n/N``: of the ``N``
+    events simulated inside this interval, the ``n`` whose peak exceeds the
+    threshold.  No plotting position is applied.  Within an interval every
+    event carries the same weight and the interval is sampled by design
+    rather than observed, so ``n/N`` is the quantity ARR Book 4, Section
+    4.3.3.3 asks for, and it is already unbiased for it.
+    """
     n = qs_sorted.size
     n_gt = n - np.searchsorted(qs_sorted, grid, side="right")
-    c = (n_gt - a) / (n + 1.0 - 2.0 * a)
-    c = np.where(n_gt == 0, 0.0, np.clip(c, 0.0, 1.0))
+    c = n_gt / float(n)
     if kind == FREQUENT_OPEN:
         # geometric mean of c and first_factor * c
         return c * np.sqrt(first_factor)
@@ -159,9 +83,11 @@ def _interval_conditional(qs_sorted, grid, kind, a, first_factor):
 
 
 def interval_exceedance_curve(q, weight, interval, kind=None, grid=None,
-                              plotting_position=DEFAULT_PLOTTING_POSITION,
                               first_factor: float = ARR_FIRST_FACTOR):
     """``(grid, P, contributions)`` by the interval-wise total probability theorem.
+
+    The conditional exceedance inside each interval is the raw ``n/N``; there
+    is no plotting position anywhere in this module.
 
     ``contributions`` is a ``(n_intervals, n_grid)`` array of each interval's
     additive contribution to ``P``, which is what the stratum-contribution
@@ -172,7 +98,6 @@ def interval_exceedance_curve(q, weight, interval, kind=None, grid=None,
     interval = np.asarray(interval, int)
     kind = (np.zeros_like(interval) if kind is None else np.asarray(kind, int))
     grid = np.unique(q) if grid is None else np.asarray(grid, float)
-    a = plotting_position_a(plotting_position)
 
     ids = np.unique(interval)
     contrib = np.zeros((ids.size, grid.size))
@@ -182,7 +107,7 @@ def interval_exceedance_curve(q, weight, interval, kind=None, grid=None,
         if kinds_here.size != 1:
             raise ValueError(f"interval {k} mixes kinds {kinds_here}")
         c = _interval_conditional(np.sort(q[m]), grid, int(kinds_here[0]),
-                                  a, first_factor)
+                                  first_factor)
         contrib[row] = float(weight[m].sum()) * c
     return grid, contrib.sum(axis=0), contrib
 
@@ -198,11 +123,9 @@ def _monotone(grid, P):
 
 
 def interval_quantile(q, weight, interval, kind=None, aeps=None,
-                      plotting_position=DEFAULT_PLOTTING_POSITION,
                       first_factor: float = ARR_FIRST_FACTOR):
     """Flood quantiles from the interval-wise estimator."""
     grid, P, _ = interval_exceedance_curve(q, weight, interval, kind,
-                                           plotting_position=plotting_position,
                                            first_factor=first_factor)
     g, p = _monotone(grid, P)
     aeps = np.atleast_1d(np.asarray(aeps, float))
@@ -214,11 +137,10 @@ def interval_quantile(q, weight, interval, kind=None, aeps=None,
 
 
 def interval_exceedance_probability(q, weight, interval, kind=None,
-                                    discharge=None, plotting_position=DEFAULT_PLOTTING_POSITION,
+                                    discharge=None,
                                     first_factor: float = ARR_FIRST_FACTOR):
     """Annual exceedance probability of a discharge, interval-wise form."""
     grid, P, _ = interval_exceedance_curve(q, weight, interval, kind,
-                                           plotting_position=plotting_position,
                                            first_factor=first_factor)
     g, p = _monotone(grid, P)
     discharge = np.atleast_1d(np.asarray(discharge, float))
@@ -227,7 +149,6 @@ def interval_exceedance_probability(q, weight, interval, kind=None,
 
 
 def stratum_contribution(q, weight, interval, discharge, kind=None,
-                         plotting_position=DEFAULT_PLOTTING_POSITION,
                          first_factor: float = ARR_FIRST_FACTOR):
     """Fractional contribution of each rainfall interval to ``P(Q > discharge)``.
 
@@ -240,7 +161,6 @@ def stratum_contribution(q, weight, interval, discharge, kind=None,
     grid = np.atleast_1d(np.asarray(discharge, float))
     _, P, contrib = interval_exceedance_curve(q, weight, interval, kind,
                                               grid=grid,
-                                              plotting_position=plotting_position,
                                               first_factor=first_factor)
     total = P[0]
     out = contrib[:, 0]
@@ -248,9 +168,7 @@ def stratum_contribution(q, weight, interval, discharge, kind=None,
 
 
 def bootstrap_quantiles(q, weight, interval, aeps, kind=None, n_boot=500,
-                        rng=None, estimator="arr",
-                        plotting_position=DEFAULT_PLOTTING_POSITION,
-                        first_factor: float = ARR_FIRST_FACTOR):
+                        rng=None, first_factor: float = ARR_FIRST_FACTOR):
     """Monte Carlo sampling uncertainty of the quantiles, by within-interval
     bootstrap.
 
@@ -275,11 +193,6 @@ def bootstrap_quantiles(q, weight, interval, aeps, kind=None, n_boot=500,
     for b in range(n_boot):
         pick = np.concatenate([rng.choice(g, size=g.size, replace=True)
                                for g in groups])
-        if estimator == "arr":
-            out[b] = interval_quantile(q[pick], weight[pick], interval[pick],
-                                       kind[pick], aeps, plotting_position,
-                                       first_factor)
-        else:
-            out[b] = np.atleast_1d(weighted_quantile(q[pick], weight[pick], aeps,
-                                                     plotting_position))
+        out[b] = interval_quantile(q[pick], weight[pick], interval[pick],
+                                   kind[pick], aeps, first_factor=first_factor)
     return out
