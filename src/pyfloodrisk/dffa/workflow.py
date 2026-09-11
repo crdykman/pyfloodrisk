@@ -13,11 +13,8 @@ initial state distribution   a continuous GR4H run over the station's
                              climate record (:func:`continuous_state_table`)
 temporal patterns            the station's ARR Data Hub increments file
                              (:func:`station_patterns`)
-design rainfall (IFD)        a CSV of BoM depths -- a Bureau download
-                             as-issued through
-                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_bom_csv`,
-                             or a tidied table through
-                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_csv`.
+design rainfall (IFD)        a Bureau IFD download as-issued, read by
+                             :func:`~pyfloodrisk.dffa.ifd.ifd_table_from_bom_csv`.
                              One download is bundled per demo station, and
                              :func:`station_ifd` reads it and applies the
                              region's ARR 2019 areal reduction factor.
@@ -379,7 +376,7 @@ def station_ifd(station: str = DEMO_STATION, arf=None) -> IFDCurve:
     if not path.exists():
         raise FileNotFoundError(
             f"no bundled IFD table for station {station}; supply your own "
-            "depths with ifd_table_from_csv() or ifd_table_from_bom_csv()")
+            "depths with ifd_table_from_bom_csv()")
     if arf is None:
         arf = ARR2019ARF(region=station_arf_region(station))
     return IFDCurve(ifd_table_from_bom_csv(path), arf=arf)
@@ -424,7 +421,7 @@ def run_dffa(
     ifd :
         Design rainfall curve.  Defaults to :func:`station_ifd`, the bundled
         demonstration table, which is **not** a design IFD -- pass your own
-        (``IFDCurve(ifd_table_from_csv(path))``) for anything you report.
+        (``IFDCurve(ifd_table_from_bom_csv(path))``) for anything you report.
     stratification :
         Rainfall sampling scheme; defaults to 25 intervals x 60 simulations
         over 90% to 1 in 10^5 AEP.

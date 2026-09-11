@@ -19,8 +19,7 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, IFDCurve,
                               pet_climatology, run_dffa, state_sampler_from_run,
                               station_ifd, station_patterns)
 from pyfloodrisk.dffa.ifd import (ARF_REGIONS, ARR2019ARF, _parse_aep,
-                                  ifd_table_from_bom_csv, unit_arf,
-                                  ifd_table_from_csv)
+                                  ifd_table_from_bom_csv, unit_arf)
 from pyfloodrisk.demo_data import (AREAL_TP_DURATIONS_H, DEMO_ARF_REGIONS,
                                    POINT_TP_DURATIONS_H, TP_DURATIONS_H,
                                    catchment_data, station_arf_region,
@@ -279,7 +278,9 @@ def test_bundled_bom_ifd_table_is_well_formed(station):
     demo's single point of failure.
     """
     table = ifd_table_from_bom_csv(demo_paths()["ifd"] / f"{station}_ifds.csv")
-    assert list(table.columns) == [0.632, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
+    # frequent through to the ARR Rare depths, 1 in 200 to 1 in 2000
+    assert list(table.columns) == [0.632, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01,
+                                   0.005, 0.002, 0.001, 0.0005]
     assert list(table.index[:3]) == [1.0, 1.5, 2.0]     # hours, from minutes
     assert table.index[-1] == 168.0
     values = table.to_numpy(float)
@@ -299,6 +300,9 @@ def test_bom_ifd_depths_match_the_file():
     assert table.loc[1.0, 0.632] == pytest.approx(40.4)
     assert table.loc[24.0, 0.01] == pytest.approx(486.0)
     assert table.loc[168.0, 0.5] == pytest.approx(287.0)
+    # the Rare columns, whose headers are "1 in 200" rather than a percentage
+    assert table.loc[1.0, 0.005] == pytest.approx(123.0)
+    assert table.loc[24.0, 0.0005] == pytest.approx(745.0)
 
 
 def test_bom_reader_rejects_a_tidy_table(tmp_path):
@@ -355,16 +359,31 @@ def test_aep_labels_are_parsed_from_the_usual_notations():
     assert _parse_aep(50) == pytest.approx(0.5)          # bare percentage
 
 
-def test_ifd_table_from_csv_roundtrips(tmp_path):
+def test_bom_reader_accepts_a_hand_built_table(tmp_path):
+    """A table you assembled yourself, in the download's own layout.
+
+    This is the only loader, so it has to serve both a Bureau download and a
+    table someone typed out; all it needs is the header row and the numeric
+    'Duration in min' column.
+    """
     path = tmp_path / "ifd.csv"
-    path.write_text("duration_min,50%,10%,1%\n60,22.1,36.0,54.8\n"
-                    "360,41.0,63.0,95.0\n")
-    table = ifd_table_from_csv(path, duration_col="duration_min",
-                               duration_units="minutes")
-    assert list(table.index) == [1.0, 6.0]
-    assert list(table.columns) == [0.5, 0.1, 0.01]
+    path.write_text("some preamble line\n\n"
+                    ",,Annual Exceedance Probability (AEP)\n"
+                    "Duration,Duration in min,50%,10%,1 in 100\n"
+                    "1 hour,60,22.1,36.0,54.8\n"
+                    "6 hour,360,41.0,63.0,95.0\n")
+    table = ifd_table_from_bom_csv(path)
+    assert list(table.index) == [1.0, 6.0]               # minutes -> hours
+    assert list(table.columns) == [0.5, 0.1, 0.01]       # %, and "1 in 100"
     assert table.loc[1.0, 0.01] == pytest.approx(54.8)
     IFDCurve(table)
+
+
+def test_only_the_bom_reader_is_exposed():
+    """Design rainfalls enter one way: the download as issued."""
+    from pyfloodrisk.dffa import ifd as ifd_module
+    assert not hasattr(ifd_module, "ifd_table_from_csv")
+    assert "ifd_table_from_csv" not in ifd_module.__all__
 
 
 # ------------------------------------------------------------------ workflow

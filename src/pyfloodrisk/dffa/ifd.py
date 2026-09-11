@@ -3,24 +3,26 @@ Design rainfall frequency curve (IFD) and areal reduction.
 
 The Monte Carlo framework needs a *continuous* rainfall frequency curve, whereas
 ARR/BoM IFD data are tabulated at a handful of AEPs.  ``IFDCurve`` fits a
-monotone curve through the tabulated points in the (standard normal variate,
-log depth) domain -- i.e. a log-normal-like curve that is allowed local
-curvature -- and extrapolates log-linearly in the normal variate beyond the
-rarest tabulated point.  That is the same transformation the ARR joint
-probability framework uses to stratify the rainfall domain, so the curve and the
-stratification live in the same coordinate system.
+monotone curve through the tabulated points against the standard normal variate
+of the AEP -- the same transformation the ARR joint probability framework uses
+to stratify the rainfall domain, so the curve and the stratification live in the
+same coordinate system.  Two choices are exposed, both of which only matter
+outside the tabulated range:
+
+``depth_interp``
+    The domain the curve is fitted in.  ``"log"`` (the default) gives a
+    log-normal-like curve; ``"arithmetic"`` is the *arithmetic*-normal domain
+    ARR Book 4, Section 4.2.1 recommends for the shape-factor approach.  Inside
+    the table they agree to a few tenths of a percent.
+``rare_extension``
+    :class:`ParabolicRareExtension` replaces the straight tail past the rarest
+    tabulated AEP with the parabolic interpolation of Siriwardena and Weinmann
+    (1998), anchored on an extreme rainfall estimate you supply.
 
 Notes / things to check against your own data
 ---------------------------------------------
 * Depths are *burst* depths (as IFD data are), not complete storms.  Everything
   downstream inherits that limitation (see README).
-* If you have ARR "rare" (1 in 200 to 1 in 2000) and "very frequent" design
-  rainfalls, add them as extra columns of the table rather than relying on the
-  extrapolation.
-* The ARF implementation reproduces the *functional form* of the ARR 2019
-  long-duration equation, but no coefficients are bundled -- you must supply the
-  nine region-specific coefficients from ARR Book 2, Chapter 4.  Verify both the
-  form and the coefficients before using it in anger.
 """
 
 from __future__ import annotations
@@ -33,16 +35,125 @@ import pandas as pd
 from scipy.interpolate import PchipInterpolator
 from scipy.stats import norm
 
-__all__ = ["IFDCurve", "unit_arf", "ARR2019LongDurationARF", "ifd_table_from_csv",
-           "ifd_table_from_bom_csv"]
+__all__ = ["IFDCurve", "ParabolicRareExtension", "unit_arf",
+           "ARR2019LongDurationARF", "ifd_table_from_bom_csv"]
 
 #: AEPs the bundled demo tables are tabulated at, and a reasonable default for
 #: :meth:`IFDCurve.as_frame`.
 DEFAULT_IFD_AEPS = (0.5, 0.2, 0.1, 0.05, 0.02, 0.01)
 
 
+#: Floor applied before taking a log, so that the arithmetic-domain tail
+#: crossing zero at the frequent end degrades to "no rain" rather than a nan.
+_MIN_DEPTH_MM = 1e-12
+
+
 def _as_array(x):
     return np.atleast_1d(np.asarray(x, dtype=float))
+
+
+@dataclass
+class ParabolicRareExtension:
+    """Parabolic interpolation from the rarest design rainfall to an extreme.
+
+    ARR Book 4, Section 4.2.1 notes that beyond about 1 in 500 AEP the design
+    rainfall should come from the cumulative distribution directly, and points
+    at the parabolic interpolation function of Siriwardena and Weinmann (1998)
+    as one way to build it.  This is that functional form: in the
+    (standard normal variate ``z``, log depth) domain the extension is a
+    parabola
+
+        log R(z) = a + b z + c z**2
+
+    fixed by three conditions -- it passes through the rarest tabulated design
+    rainfall, it is *tangent* there to the fitted frequency curve, and it
+    passes through the extreme anchor.  Those give a closed form; with
+    ``dz = z_anchor - z_rare``,
+
+        c = [log R_anchor - log R_rare - s dz] / dz**2,
+        b = s - 2 c z_rare,     a = log R_rare - b z_rare - c z_rare**2,
+
+    ``s`` being the slope ``d(log R)/dz`` of the fitted curve at the rarest
+    tabulated point.  Tangency is what stops the curve kinking where the
+    extension takes over.
+
+    **You must supply the anchor, and you should check the construction
+    against ARR before reporting from it.**  The anchor is normally the PMP
+    with an assigned AEP; ARR gives the AEP of the PMP as a function of
+    catchment area and duration, and neither the PMP depths nor that AEP are
+    bundled with this package.
+
+    Parameters
+    ----------
+    depths_mm
+        Anchor depth (mm) by storm duration in hours, e.g.
+        ``{24.0: 900.0, 72.0: 1200.0}``.  Interpolated onto the IFD table's
+        own durations in the log depth / log duration domain, and held flat
+        beyond the supplied range.
+    aep
+        Annual exceedance probability assigned to the anchor.  Must be rarer
+        than the rarest tabulated AEP.
+    """
+
+    depths_mm: Mapping[float, float]
+    aep: float
+
+    def __post_init__(self):
+        d = {float(k): float(v) for k, v in dict(self.depths_mm).items()}
+        if not d:
+            raise ValueError("rare extension needs at least one anchor depth")
+        if any(v <= 0 for v in d.values()):
+            raise ValueError("anchor depths must be positive")
+        if not 0.0 < float(self.aep) < 1.0:
+            raise ValueError(f"anchor aep must lie in (0, 1), got {self.aep}")
+        self.depths_mm = dict(sorted(d.items()))
+
+    def _anchor_at(self, durations_h: np.ndarray) -> np.ndarray:
+        """Anchor depth at each of the IFD table's durations."""
+        dur = np.asarray(list(self.depths_mm), float)
+        dep = np.asarray(list(self.depths_mm.values()), float)
+        if dur.size == 1:
+            return np.full(np.size(durations_h), dep[0])
+        return np.exp(np.interp(np.log(np.asarray(durations_h, float)),
+                                np.log(dur), np.log(dep)))
+
+    def _coefficients(self, curve: "IFDCurve") -> dict:
+        """Per-duration ``a``, ``b``, ``c``, fitted to ``curve``."""
+        z1 = float(curve._z[-1])
+        z2 = float(norm.ppf(1.0 - float(self.aep)))
+        if z2 <= z1:
+            raise ValueError(
+                f"the anchor AEP ({self.aep:g}) must be rarer than the rarest "
+                f"tabulated AEP ({float(curve.aeps.min()):g})")
+        dz = z2 - z1
+
+        anchor = self._anchor_at(curve.durations)
+        y1 = np.log(curve._d[:, -1])                 # log depth, rarest tabulated
+        y2 = np.log(anchor)
+        if np.any(y2 <= y1):
+            bad = curve.durations[np.flatnonzero(y2 <= y1)]
+            raise ValueError(
+                "the anchor depth must exceed the rarest tabulated depth; it "
+                f"does not at duration(s) {list(bad)} h")
+
+        # slope d(log R)/dz of the fitted curve at the rarest tabulated point
+        s = np.array([float(f.derivative()(z1)) for f in curve._fits])
+        if not curve._log:                            # fitted in depth, not log
+            s = s / curve._d[:, -1]
+
+        c = (y2 - y1 - s * dz) / (dz * dz)
+        b = s - 2.0 * c * z1
+        # the parabola must still increase all the way to the anchor, or the
+        # design rainfall would fall as the event gets rarer
+        slope_at_anchor = b + 2.0 * c * z2
+        if np.any(slope_at_anchor <= 0):
+            bad = curve.durations[np.flatnonzero(slope_at_anchor <= 0)]
+            raise ValueError(
+                "the parabolic extension turns over before reaching the "
+                f"anchor at duration(s) {list(bad)} h: the anchor is too close "
+                "to the tabulated curve for the curve's own gradient. Use a "
+                "larger anchor depth, a rarer anchor AEP, or no extension.")
+        return {"a": y1 - b * z1 - c * z1 * z1, "b": b, "c": c}
 
 
 class IFDCurve:
@@ -61,6 +172,24 @@ class IFDCurve:
     duration_interp
         ``"pchip"`` (default) or ``"linear"`` interpolation of log depth against
         log duration, used when a requested duration is not tabulated.
+    depth_interp
+        Domain the depth-AEP curve is interpolated in, against the standard
+        normal variate of the AEP:
+
+        * ``"log"`` (default) -- log depth, i.e. a log-normal-like curve.
+        * ``"arithmetic"`` -- depth itself, the *arithmetic*-normal domain ARR
+          Book 4, Section 4.2.1 recommends for the shape-factor approach.
+
+        Inside the tabulated range the two agree to a few tenths of a percent.
+        They diverge where the curve is extrapolated past the rarest tabulated
+        AEP, where ``"log"`` grows exponentially in the variate and
+        ``"arithmetic"`` linearly -- so ``"log"`` is the more conservative of
+        the two.  Supplying design rainfalls that reach your rarest AEP of
+        interest matters far more than this choice.
+    rare_extension
+        Optional :class:`ParabolicRareExtension`, replacing the straight-line
+        tail beyond the rarest tabulated AEP with a parabola anchored on an
+        extreme rainfall estimate.
     """
 
     def __init__(
@@ -68,7 +197,12 @@ class IFDCurve:
         table: pd.DataFrame,
         arf: Callable[[float, float, float], float] | None = None,
         duration_interp: str = "pchip",
+        depth_interp: str = "log",
+        rare_extension: "ParabolicRareExtension | None" = None,
     ):
+        if depth_interp not in ("log", "arithmetic"):
+            raise ValueError("depth_interp must be 'log' or 'arithmetic', "
+                             f"got {depth_interp!r}")
         table = table.copy()
         table.columns = [float(c) for c in table.columns]
         table = table.reindex(sorted(table.columns), axis=1)  # ascending AEP
@@ -84,31 +218,53 @@ class IFDCurve:
         self.aeps = np.asarray(table.columns, dtype=float)
         self.arf = arf if arf is not None else unit_arf
         self.duration_interp = duration_interp
+        self.depth_interp = depth_interp
+        self.rare_extension = rare_extension
+        self._log = depth_interp == "log"
 
         # z = standard normal variate of non-exceedance probability
         self._z = norm.ppf(1.0 - self.aeps)          # ascending AEP -> descending z
         order = np.argsort(self._z)
         self._z = self._z[order]
-        self._logd = np.log(table.values[:, order])   # (n_dur, n_aep) ascending z
+        self._d = table.values[:, order]              # (n_dur, n_aep) ascending z
+        # the domain the AEP axis is fitted in: log depth or depth itself
+        self._y = np.log(self._d) if self._log else self._d
 
-        # per-duration monotone fit of log depth against z, with linear tails
-        self._fits = [PchipInterpolator(self._z, self._logd[i], extrapolate=False)
+        # per-duration monotone fit against z, with linear tails in that domain
+        self._fits = [PchipInterpolator(self._z, self._y[i], extrapolate=False)
                       for i in range(len(self.durations))]
-        # tail slopes (log mm per unit z) from the two outermost knots
-        self._slope_hi = (self._logd[:, -1] - self._logd[:, -2]) / (self._z[-1] - self._z[-2])
-        self._slope_lo = (self._logd[:, 1] - self._logd[:, 0]) / (self._z[1] - self._z[0])
+        self._slope_hi = (self._y[:, -1] - self._y[:, -2]) / (self._z[-1] - self._z[-2])
+        self._slope_lo = (self._y[:, 1] - self._y[:, 0]) / (self._z[1] - self._z[0])
+
+        self._par = None
+        if rare_extension is not None:
+            self._par = rare_extension._coefficients(self)
 
     # ------------------------------------------------------------------ core
     def _logdepth_at_tabulated_durations(self, z: np.ndarray) -> np.ndarray:
-        """(n_dur, n_z) log point depth."""
+        """(n_dur, n_z) log point depth, at each tabulated duration.
+
+        Log depth is the primary quantity because the duration axis is
+        interpolated in it.  In ``"log"`` mode that is what the fit already
+        returns, so there is no exp/log round trip.
+        """
         out = np.empty((len(self.durations), z.size))
+        hi = z > self._z[-1]
+        lo = z < self._z[0]
         for i, fit in enumerate(self._fits):
             y = fit(z)
-            hi = z > self._z[-1]
-            lo = z < self._z[0]
-            y[hi] = self._logd[i, -1] + self._slope_hi[i] * (z[hi] - self._z[-1])
-            y[lo] = self._logd[i, 0] + self._slope_lo[i] * (z[lo] - self._z[0])
-            out[i] = y
+            y[hi] = self._y[i, -1] + self._slope_hi[i] * (z[hi] - self._z[-1])
+            y[lo] = self._y[i, 0] + self._slope_lo[i] * (z[lo] - self._z[0])
+            # in the arithmetic domain a straight tail can cross zero at the
+            # frequent end, so floor it before taking the log
+            ld = y if self._log else np.log(np.maximum(y, _MIN_DEPTH_MM))
+            if self._par is not None and hi.any():
+                # beyond the rarest tabulated AEP the parabola takes over, and
+                # it is defined directly in log depth
+                a, b, c = (self._par[k][i] for k in ("a", "b", "c"))
+                zz = z[hi]
+                ld[hi] = a + b * zz + c * zz * zz
+            out[i] = ld
         return out
 
     def point_depth(self, duration_h, aep) -> np.ndarray:
@@ -159,61 +315,6 @@ class IFDCurve:
 
 
 # ------------------------------------------------------------------- loaders
-def ifd_table_from_csv(path, duration_col: str = "duration_h",
-                       duration_units: str = "hours") -> pd.DataFrame:
-    """Read a tidy design rainfall table into the layout :class:`IFDCurve` wants.
-
-    The expected file is one row per duration and one column per AEP::
-
-        duration_h,0.5,0.2,0.1,0.05,0.02,0.01
-        1,22.1,30.5,36.0,41.4,48.9,54.8
-        ...
-
-    AEP column headers may be fractions (``0.01``), percentages (``1%``) or
-    average recurrence intervals (``1 in 100``, ``100y``).  Depths are mm.
-    Lines beginning ``#`` are ignored, so a table can carry its provenance
-    at the top of the file (the bundled demo tables do).
-
-    This is the only way design rainfalls enter the framework.  A BoM IFD
-    download is *not* in the layout above -- it carries a metadata preamble
-    and its own column naming, and the layout has changed between releases
-    -- so extract the depths you want into a tidy table like the above
-    rather than pointing this at the download unedited.
-
-    Parameters
-    ----------
-    path :
-        CSV file path.
-    duration_col :
-        Name of the duration column.
-    duration_units :
-        ``"hours"`` (default) or ``"minutes"``.
-
-    Returns
-    -------
-    DataFrame indexed by duration in hours, columns AEP as a fraction.
-    """
-    raw = pd.read_csv(path, comment="#", skip_blank_lines=True)
-    cols = {str(c).strip().lower(): c for c in raw.columns}
-    key = duration_col.strip().lower()
-    if key not in cols:
-        raise ValueError(
-            f"no duration column '{duration_col}'; got {list(raw.columns)}")
-    dur = pd.to_numeric(raw[cols[key]], errors="coerce").to_numpy(float)
-    if duration_units.startswith("min"):
-        dur = dur / 60.0
-    elif not duration_units.startswith("hour"):
-        raise ValueError("duration_units must be 'hours' or 'minutes'")
-
-    depth_cols = [c for c in raw.columns if c != cols[key]]
-    aeps = [_parse_aep(c) for c in depth_cols]
-    table = pd.DataFrame(
-        {a: pd.to_numeric(raw[c], errors="coerce").to_numpy(float)
-         for a, c in zip(aeps, depth_cols)},
-        index=pd.Index(dur, name="duration_h"))
-    return table.sort_index()
-
-
 def ifd_table_from_bom_csv(path) -> pd.DataFrame:
     """Read a BoM IFD download as-issued into the layout :class:`IFDCurve` wants.
 
@@ -230,8 +331,14 @@ def ifd_table_from_bom_csv(path) -> pd.DataFrame:
     than the ``1.5 hour`` text label, and the AEP headers are parsed by
     :func:`_parse_aep` (so ``63.2%`` becomes 0.632).
 
-    Use :func:`ifd_table_from_csv` instead for a table you have already
-    tidied yourself; this function is for the download as it comes.
+    This is the only way design rainfalls enter the framework: the download
+    as the Bureau issues it, so the depths you run on are traceably the
+    depths the Bureau published.  The layout has changed between releases,
+    so check one duration against the file by hand before trusting a run.
+
+    A table you have assembled yourself is read by the same function, as
+    long as it carries the two header columns (``Duration``, ``Duration in
+    min``) and one column per AEP -- see the header-row check below.
 
     Parameters
     ----------
@@ -252,8 +359,9 @@ def ifd_table_from_bom_csv(path) -> pd.DataFrame:
     if header_row is None:
         raise ValueError(
             f"{path}: no 'Duration,Duration in min,...' header row found; this "
-            "does not look like a BoM IFD download (use ifd_table_from_csv "
-            "for an already-tidy table)")
+            "does not look like a BoM IFD download. The reader keys on that "
+            "row; a table you assembled yourself needs the same two duration "
+            "columns followed by one column per AEP.")
 
     raw = pd.read_csv(path, skiprows=header_row, encoding="utf-8-sig")
     raw = raw.dropna(how="all")

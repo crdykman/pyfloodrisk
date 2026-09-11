@@ -12,7 +12,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from scipy.stats import norm
+
 from pyfloodrisk.dffa.ifd import (ARF_REGIONS, ARR2019ARF, IFDCurve,
+                                  ParabolicRareExtension,
                                   _arf_long, _arf_short, unit_arf)
 
 REGION = "East Coast North"
@@ -159,3 +162,132 @@ def test_arf_reduces_the_design_depths_an_ifd_curve_returns():
         assert 0 < r < p
     # and asking for no area at all leaves the point depth alone
     assert float(reduced.depth(24.0, 0.01)) == pytest.approx(90.0)
+
+
+# ------------------------------------------- depth interpolation domain
+def _demo_table(station="117002A"):
+    from pyfloodrisk.dffa.ifd import ifd_table_from_bom_csv
+    from pyfloodrisk.demo_data import demo_paths
+    return ifd_table_from_bom_csv(demo_paths()["ifd"] / f"{station}_ifds.csv")
+
+
+@pytest.mark.parametrize("station", ["117002A", "405214"])
+def test_arithmetic_and_log_agree_inside_the_tabulated_range(station):
+    """ARR 4.2.1 prefers the arithmetic-normal domain; inside the table it
+    barely matters, which is the point worth pinning."""
+    t = _demo_table(station)
+    log = IFDCurve(t, depth_interp="log")
+    ari = IFDCurve(t, depth_interp="arithmetic")
+    for duration_h in (24.0, 72.0):
+        for aep in (0.3, 0.15, 0.03, 0.007, 0.001):     # all inside the table
+            a = float(log.point_depth(duration_h, aep))
+            b = float(ari.point_depth(duration_h, aep))
+            assert abs(a / b - 1) < 0.01, (station, duration_h, aep, a, b)
+
+
+def test_both_domains_reproduce_the_tabulated_depths_exactly():
+    t = _demo_table()
+    for mode in ("log", "arithmetic"):
+        c = IFDCurve(t, depth_interp=mode)
+        for aep in t.columns:
+            got = float(c.point_depth(24.0, aep))
+            assert got == pytest.approx(float(t.loc[24.0, aep]), rel=1e-9), mode
+
+
+def test_arithmetic_extrapolates_below_log():
+    """Past the table the two diverge: log grows exponentially in z."""
+    t = _demo_table()
+    log = IFDCurve(t, depth_interp="log")
+    ari = IFDCurve(t, depth_interp="arithmetic")
+    rarest = min(t.columns)
+    for aep in (rarest / 5, rarest / 50):
+        assert float(log.point_depth(24.0, aep)) > float(ari.point_depth(24.0, aep))
+
+
+def test_depth_interp_is_validated():
+    with pytest.raises(ValueError, match="depth_interp must be"):
+        IFDCurve(_demo_table(), depth_interp="loglog")
+
+
+# ------------------------------------------------ parabolic rare extension
+def _anchor(table, factor=2.0):
+    """An extreme anchor a given multiple of the rarest tabulated depth."""
+    rarest = min(table.columns)
+    return {float(d): float(table.loc[d, rarest]) * factor for d in table.index}
+
+
+def test_parabolic_extension_hits_its_anchor():
+    t = _demo_table()
+    ext = ParabolicRareExtension(depths_mm=_anchor(t), aep=1e-7)
+    c = IFDCurve(t, rare_extension=ext)
+    for duration_h in (24.0, 72.0):
+        want = _anchor(t)[duration_h]
+        assert float(c.point_depth(duration_h, 1e-7)) == pytest.approx(want, rel=1e-6)
+
+
+def test_parabolic_extension_is_tangent_at_the_join():
+    """No kink where the extension takes over: value and slope both match."""
+    t = _demo_table()
+    c = IFDCurve(t, rare_extension=ParabolicRareExtension(_anchor(t), aep=1e-7))
+    rarest = min(t.columns)
+    # continuous in value at the rarest tabulated AEP
+    assert float(c.point_depth(24.0, rarest)) == pytest.approx(
+        float(t.loc[24.0, rarest]), rel=1e-9)
+    # and in slope: one-sided gradients in (z, log depth) agree
+    z0 = norm.ppf(1 - rarest)
+    h = 1e-4
+    def logd(z):
+        return np.log(float(c.point_depth(24.0, 1 - norm.cdf(z))))
+    inside = (logd(z0) - logd(z0 - h)) / h
+    outside = (logd(z0 + h) - logd(z0)) / h
+    assert inside == pytest.approx(outside, rel=5e-3)
+
+
+def test_parabolic_extension_is_monotone_and_below_the_log_tail():
+    """It curves toward the anchor, so it must sit under the straight tail."""
+    t = _demo_table()
+    plain = IFDCurve(t)
+    ext = IFDCurve(t, rare_extension=ParabolicRareExtension(_anchor(t), aep=1e-7))
+    aeps = np.array([4e-4, 1e-4, 1e-5, 1e-6, 1e-7])
+    d = np.array([float(ext.point_depth(24.0, a)) for a in aeps])
+    assert np.all(np.diff(d) > 0)                      # rarer is deeper
+    p = np.array([float(plain.point_depth(24.0, a)) for a in aeps])
+    assert np.all(d[1:] < p[1:])
+
+
+def test_parabolic_extension_works_in_the_arithmetic_domain_too():
+    t = _demo_table()
+    c = IFDCurve(t, depth_interp="arithmetic",
+                 rare_extension=ParabolicRareExtension(_anchor(t), aep=1e-7))
+    assert float(c.point_depth(24.0, 1e-7)) == pytest.approx(
+        _anchor(t)[24.0], rel=1e-6)
+
+
+def test_rare_extension_rejects_a_too_frequent_anchor():
+    t = _demo_table()
+    with pytest.raises(ValueError, match="must be rarer than"):
+        IFDCurve(t, rare_extension=ParabolicRareExtension(_anchor(t), aep=0.01))
+
+
+def test_rare_extension_rejects_an_anchor_below_the_table():
+    t = _demo_table()
+    with pytest.raises(ValueError, match="must exceed the rarest tabulated"):
+        IFDCurve(t, rare_extension=ParabolicRareExtension(
+            _anchor(t, factor=0.5), aep=1e-7))
+
+
+def test_rare_extension_rejects_an_anchor_that_turns_the_curve_over():
+    """Too small an anchor gap and the parabola peaks before reaching it."""
+    t = _demo_table()
+    with pytest.raises(ValueError, match="turns over"):
+        IFDCurve(t, rare_extension=ParabolicRareExtension(
+            _anchor(t, factor=1.001), aep=1e-9))
+
+
+def test_rare_extension_validates_its_own_inputs():
+    with pytest.raises(ValueError, match="at least one anchor"):
+        ParabolicRareExtension({}, aep=1e-7)
+    with pytest.raises(ValueError, match="anchor depths must be positive"):
+        ParabolicRareExtension({24.0: -1.0}, aep=1e-7)
+    with pytest.raises(ValueError, match="anchor aep must lie"):
+        ParabolicRareExtension({24.0: 900.0}, aep=1.5)

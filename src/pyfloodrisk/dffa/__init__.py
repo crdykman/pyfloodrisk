@@ -52,9 +52,9 @@ With your own data, assemble the four inputs yourself::
 """
 
 from .ifd import (ARF_REGIONS, ARR2019ARF, ARR2019LongDurationARF,
+                  ParabolicRareExtension,
                   DEFAULT_IFD_AEPS, IFDCurve,
-                  ifd_table_from_bom_csv,
-                  ifd_table_from_csv, unit_arf)
+                  ifd_table_from_bom_csv, unit_arf)
 from .patterns import (DEFAULT_AEP_BANDS, PreBurstSampler, TemporalPatternLibrary,
                        resample_increments)
 from .states import (UH_TOTAL, InitialStateSampler, PETClimatology,
@@ -69,8 +69,8 @@ from .workflow import (DEMO_PARAMETERS, continuous_state_table,
 from . import diagnostics, tpt
 
 __all__ = [
-    "IFDCurve", "unit_arf", "ARR2019LongDurationARF", "ifd_table_from_csv",
-    "ARR2019ARF", "ARF_REGIONS",
+    "IFDCurve", "unit_arf", "ARR2019LongDurationARF",
+    "ARR2019ARF", "ARF_REGIONS", "ParabolicRareExtension",
     "ifd_table_from_bom_csv",
     "DEFAULT_IFD_AEPS",
     "TemporalPatternLibrary", "PreBurstSampler", "resample_increments",

@@ -63,9 +63,8 @@ print(out["results"].summary())
 `run_dffa` is a demonstration — its design rainfalls are the station's
 bundled BoM IFD download, areally reduced with `ARR2019ARF`, and
 its parameters are plausible rather than calibrated. Design rainfalls
-enter one way only, from a CSV: `ifd_table_from_bom_csv` for a Bureau
-download as-issued, `ifd_table_from_csv` for a table you have tidied
-yourself. [docs/dffa.md](docs/dffa.md) sets out what to replace
+enter one way only — `ifd_table_from_bom_csv`, reading a Bureau IFD
+download as it was issued. [docs/dffa.md](docs/dffa.md) sets out what to replace
 before the numbers mean anything, and `examples/dffa_demo.py` builds the
 same analysis input by input.
 

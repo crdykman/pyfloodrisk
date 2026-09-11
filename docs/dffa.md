@@ -38,7 +38,7 @@ already produces:
 | event model | a calibrated parameter set through `GR4HEventEngine` — the same `pyfloodrisk.gr4h.GR4H` code the calibration uses |
 | initial state distribution | `continuous_state_table(forcings, params, area)`, a continuous GR4H run over the station's climate record |
 | temporal patterns | `station_patterns(station)`, the station region's ARR Data Hub increments files. **Areal** patterns (keyed by catchment area, not AEP band) from 12 h to 168 h, **point** patterns at 6 and 9 h, because ARR publishes no areal pattern shorter than 12 h |
-| design rainfall (IFD) | **a CSV.** `ifd_table_from_bom_csv` for a Bureau download as-issued, `ifd_table_from_csv` for a table you have tidied. `station_ifd(station)` reads the bundled download for a demo station and applies the region's `ARR2019ARF` |
+| design rainfall (IFD) | **a Bureau IFD download, as issued**, read by `ifd_table_from_bom_csv`. `station_ifd(station)` reads the bundled download for a demo station and applies the region's `ARR2019ARF` |
 
 The two bundled demo stations are **117002A** (Black River at Bruce Highway,
 QLD, 255 km², Wet Tropics patterns) and **405214** (Delatite River at Tonga
@@ -273,16 +273,45 @@ different `x4` is silently zero-padded or truncated to the engine's UH length.
 plug a different model in behind your own `EventModel` subclass, write the
 equivalent test for it first.
 
-**Design rainfalls.** They enter one way only — a CSV, so the depths you run
-on are depths you put there. `ifd_table_from_bom_csv` reads a Bureau IFD
-download as-issued (it skips the metadata preamble and takes durations from
-the `Duration in min` column); `ifd_table_from_csv` reads a table you have
-tidied yourself. The bundled downloads under `pyfloodrisk/data/ifd/` are real
-BoM depths for the grid cell nearest each demo gauge, tabulated 63.2%–1% AEP
-over 1–168 h. Two things to watch: they are **point** depths, so pass an `arf`
-if the catchment is big enough to matter (both demo catchments, at 255 and
-357 km², are), and anything rarer than 1% AEP is *extrapolated* by `IFDCurve`
-— add ARR's rare design rainfalls as extra columns if you report out there.
+**Design rainfalls.** They enter one way only — `ifd_table_from_bom_csv`,
+reading a Bureau IFD download as it was issued, so the depths you run on are
+traceably the depths the Bureau published. It skips the metadata preamble and
+takes durations from the numeric `Duration in min` column; a table you
+assembled yourself goes through the same function, as long as it carries that
+header row. The bundled downloads under `pyfloodrisk/data/ifd/` are real
+BoM depths for the grid cell nearest each demo gauge, tabulated from 63.2% AEP
+through the ARR Rare range to **1 in 2000**, over 1–168 h. They are **point**
+depths, so pass an `arf` if the catchment is big enough to matter (both demo
+catchments, at 255 and 357 km², are).
+
+Past the rarest tabulated AEP the curve is extrapolated, and there the shape of
+the curve starts to matter. Three controls, in the order they are worth
+reaching for:
+
+1. **Tabulate further.** Nothing else comes close. Going from 1% to 1 in 2000
+   removed all the extrapolation over the design range on the demo stations.
+2. **`depth_interp`.** `"log"` (default) fits log depth against the normal
+   variate; `"arithmetic"` fits depth itself, the arithmetic-normal domain ARR
+   Book 4 §4.2.1 recommends for the shape-factor approach. Inside the table
+   they agree to a few tenths of a percent. Beyond it `"log"` grows
+   exponentially in the variate and `"arithmetic"` linearly, so `"log"` is the
+   more conservative — on 117002A at 24 h, `"arithmetic"` is 1% lower at 1 in
+   5000 and 15% lower at 1 in 10⁶.
+3. **`rare_extension=ParabolicRareExtension(depths_mm, aep)`.** The parabolic
+   interpolation of Siriwardena and Weinmann (1998), per ARR Book 4 §4.2.1: in
+   the (normal variate, log depth) domain the tail becomes a parabola passing
+   through the rarest tabulated depth, *tangent* to the fitted curve there (so
+   there is no kink at the join), and passing through an extreme anchor you
+   supply — normally the PMP with its assigned AEP. **Neither the PMP depths
+   nor the AEP to assign them are bundled**; ARR gives the latter as a function
+   of catchment area and duration. The extension bends the tail down toward the
+   anchor, so it sits below the straight log tail, by 4% at 1 in 10⁵ and 14% at
+   the anchor in the illustrative case above.
+
+`IFDCurve` refuses an anchor that is more frequent than the rarest tabulated
+AEP, one below the tabulated depth, and one so close to the curve that the
+parabola turns over before reaching it — a design rainfall that falls as the
+event gets rarer would corrupt everything downstream silently.
 
 **Areal reduction.** `ARR2019ARF` implements the whole ARR Book 2 Chapter 4
 method — the long-duration equation with the ten regions' coefficients bundled
