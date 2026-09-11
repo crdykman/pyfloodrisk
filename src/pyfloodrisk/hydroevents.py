@@ -339,7 +339,7 @@ def threshold_events_by_ey(
 
 def hydro_event_pipeline(
     q_array, event_method="maxima", method_kwargs=None, alpha=0.925, passes=3, r=30,
-    ey=6.0, rank_by="peak", dt_hours=1.0,
+    ey=6.0, rank_by="peak", dt_hours=1.0, idx=False,
 ):
     """Run baseflow separation followed by event delineation on quickflow.
 
@@ -412,7 +412,20 @@ def hydro_event_pipeline(
         dt_hours=dt_hours,
     )
 
-    return df_processed, events_summary
+    if idx:
+        eventsidx = np.array([]).astype(int)
+        for i in range(len(events_summary)):
+            eventsidx = np.append(eventsidx,
+                np.arange(
+                events_summary["start"].iloc[i],
+                events_summary["end"].iloc[i]+1
+                )
+            )
+
+        return df_processed, events_summary, eventsidx
+
+    else:
+        return df_processed, events_summary
 
 
 def extract_initial_states(states, events_summary, pre_event=24):
