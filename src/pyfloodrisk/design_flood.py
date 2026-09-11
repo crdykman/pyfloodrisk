@@ -1,7 +1,4 @@
 """Design flood simulation and demo workflow orchestration.
-
-``simulate_design_flood`` and ``run_demo_workflow`` are stubs that mirror the
-R package API.  Full simulation requires a Python GR4H engine.
 """
 
 from __future__ import annotations
