@@ -185,3 +185,38 @@ def test_pipeline_accepts_pot_delineation_too():
         method_kwargs={"threshold": 0.5, "min_diff": 24})
     assert len(events) == 12
     assert events["start"].is_monotonic_increasing
+
+
+# ------------------------------------------------- events WRT rainfall
+@pytest.mark.parametrize("station", ["117002A", "405214"])
+def test_events_wrt_rainfall_runs_on_both_date_formats(station):
+    """One bundled record is day-first, the other ISO.
+
+    ``parse_dates=True, dayfirst=True`` parses the first and silently leaves
+    the second as strings, so this used to raise on the ISO records.
+    """
+    from pyfloodrisk.hydroevents import events_WRT_rainfall
+    from pyfloodrisk.demo_data import demo_paths
+    path = demo_paths()["climate"] / f"GR4H_climatedata_{station}_hr.csv"
+    q = pd.read_csv(path)["qt"].to_numpy(float)
+    _, events = hydro_event_pipeline(q, ey=None)
+
+    out, eventsidx = events_WRT_rainfall(path, events, ey=6)
+    assert len(out) > 0
+    assert eventsidx.dtype.kind == "i"
+    assert eventsidx.min() >= 0 and eventsidx.max() < q.size
+    # the rainfall-onset start never sits after the matched event's peak
+    assert (out["start"] <= out["max_index"]).all()
+
+
+def test_events_wrt_rainfall_moves_starts_earlier():
+    """The point of the function: begin at the rain, not at the rise."""
+    from pyfloodrisk.hydroevents import events_WRT_rainfall
+    from pyfloodrisk.demo_data import demo_paths
+    path = demo_paths()["climate"] / "GR4H_climatedata_117002A_hr.csv"
+    q = pd.read_csv(path)["qt"].to_numpy(float)
+    _, events = hydro_event_pipeline(q, ey=None)
+    out, _ = events_WRT_rainfall(path, events, ey=6)
+    # every retained row starts no later than the runoff event it matched
+    matched = events.loc[out["index"], "start"].to_numpy()
+    assert (out["start"].to_numpy() <= matched).all()

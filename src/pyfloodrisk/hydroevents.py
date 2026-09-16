@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
+from .demo_data import _parse_dates
+
 
 @njit(cache=True)
 def _filter_pass(qf, bf, start, stop, step, alpha):
@@ -438,8 +440,81 @@ def hydro_event_pipeline(
     return df_processed, events_summary
 
 def events_WRT_rainfall(rdata, events_summary, ey=6):
-    df = pd.read_csv(rdata, index_col=0, parse_dates=True, dayfirst=True)
-    # Identify 3 day rainfall maxima 
+    """Re-define event boundaries with respect to the rainfall that caused them.
+
+    :func:`hydro_event_pipeline` delineates events from the flow series
+    alone, so an event starts where the hydrograph rises.  For calibrating
+    against events, what matters is the rainfall that produced the rise: the
+    event should start when the rain started, not when the catchment
+    responded.  This selects the largest 3-day rainfall totals, matches each
+    to the runoff event it produced, and walks the start back to the onset of
+    the rainfall.
+
+    The procedure, in order:
+
+    1. Total the record into 3-day rainfall blocks and keep the
+       ``ey * nyears`` largest, as the rainfall events of interest.
+    2. For each, take the first delineated runoff event beginning strictly
+       after the rainfall block starts.
+    3. If that runoff event begins more than 3 days after the rainfall, treat
+       the pairing as failed and fall back to the rainfall block's own bounds
+       (start, start + 3 days).
+    4. Walk the start back day by day while the preceding day had more than
+       1 mm of rain, up to 10 days, so the event begins on the first wet day
+       rather than at the rise.
+
+    Parameters
+    ----------
+    rdata : str or path
+        CSV of the *hourly* forcing record: a datetime index in the first
+        column and a ``prec`` column in mm.  Dates are read day-first.  This
+        must be the same record ``events_summary`` was delineated from, since
+        that table indexes into it by position.
+    events_summary : DataFrame
+        Delineated events, as returned by :func:`hydro_event_pipeline`, whose
+        ``start`` and ``end`` are integer positions into ``rdata``.
+    ey : int, optional
+        Rainfall events to keep per year, as for
+        :func:`threshold_events_by_ey`.  Default 6.
+
+    Returns
+    -------
+    events_summary : DataFrame
+        The matched runoff events, one per retained rainfall event, with
+        ``start`` replaced by the rainfall-onset position.
+    eventsidx : ndarray
+        The concatenated timestep positions spanned by those events, i.e. the
+        form ``calibration(eventsidx=...)`` wants.
+
+    Notes
+    -----
+    Behaviours worth knowing before relying on this, all observed on the
+    bundled 405214 record (736 delineated events over 11.94 years):
+
+    * **The returned table and ``eventsidx`` describe different spans.**  Only
+      ``start`` is rewritten; ``end`` still holds the original runoff event's
+      end, while ``eventsidx`` is built from the possibly-substituted end of
+      step 3.  On 405214 the table spans 12 174 timesteps and ``eventsidx``
+      7 292.  Use one or the other, not both.
+    * The look-back in step 4 is applied only to the rows that *failed* the
+      3-day test at step 3, not to the successfully paired ones -- the reverse
+      of what the inline comment describes.
+    * ``nyears`` counts *distinct calendar years*, not record length, so
+      405214's mid-2010 to mid-2022 record counts 13 and keeps 78 events
+      where ``ey`` per year of record would keep 72.
+    * The returned frame carries a leftover ``index`` column, because the
+      final ``reset_index`` does not drop the old one.
+    * A rainfall maximum falling after the last delineated runoff event has no
+      event to its right and raises ``IndexError`` at step 2.
+    """
+    # Dates are parsed explicitly rather than with `parse_dates=True,
+    # dayfirst=True`: that combination silently leaves an ISO-formatted index
+    # as strings (and everything below needs a DatetimeIndex), so it worked on
+    # the day-first bundled record and raised on the ISO ones.
+    df = pd.read_csv(rdata, index_col=0)
+    df.index = pd.DatetimeIndex(_parse_dates(df.index))
+
+    # Identify 3 day rainfall maxima
     nyears = df.index.year.nunique()
     prec3d = df['prec'].resample('3D', label='left').sum()
     idxmaxs = prec3d.nlargest(ey*nyears).index.sort_values()
