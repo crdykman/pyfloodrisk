@@ -279,7 +279,7 @@ _RANK_COLUMNS = {"peak": "max", "volume": "sum"}
 
 
 def threshold_events_by_ey(
-    events_summary, n_timesteps, ey=6.0, rank_by="peak", dt_hours=1.0
+    events_summary, n_timesteps, ey=6, rank_by="peak", dt_hours=1.0
 ):
     """Keep the largest events, ``ey`` of them per year of record on average.
 
@@ -296,9 +296,9 @@ def threshold_events_by_ey(
     n_timesteps : int
         Length of the series the events were delineated from; with
         ``dt_hours`` this gives the record length in years.
-    ey : float or None, optional
+    ey : int or None, optional
         Events to keep per year of record. ``None`` keeps every event.
-        Default 6.0.
+        Default 6.
     rank_by : {"peak", "volume"}, optional
         Rank events on peak flow (the ``max`` column) or event volume (the
         ``sum`` column). Because the series is evenly spaced, ``sum`` is
@@ -339,7 +339,7 @@ def threshold_events_by_ey(
 
 def hydro_event_pipeline(
     q_array, event_method="maxima", method_kwargs=None, alpha=0.925, passes=3, r=30,
-    ey=6.0, rank_by="peak", dt_hours=1.0, idx=False,
+    ey=None, rank_by="peak", dt_hours=1.0, idx=False,
 ):
     """Run baseflow separation followed by event delineation on quickflow.
 
@@ -354,9 +354,9 @@ def hydro_event_pipeline(
         (:func:`event_POT` or :func:`event_maxima`).
     alpha, passes, r :
         Passed through to :func:`baseflow_b`.
-    ey : float or None, optional
+    ey : int or None, optional
         Keep only the largest events, ``ey`` of them per year of record on
-        average. Default 6.0, i.e. the six largest events per year; pass
+        average. Default 6, i.e. the six largest events per year; pass
         ``None`` to keep every delineated event. See
         :func:`threshold_events_by_ey`.
     rank_by : {"peak", "volume"}, optional
@@ -404,28 +404,80 @@ def hydro_event_pipeline(
     else:
         raise ValueError("Invalid event_method selection. Use 'POT' or 'maxima'.")
 
-    # Step 3: Keep only the largest events, on average `ey` per year.  The
-    # index is reset here because extract_initial_states looks its rows up
-    # by label.
-    events_summary = threshold_events_by_ey(
-        events_summary, len(df_processed), ey=ey, rank_by=rank_by,
-        dt_hours=dt_hours,
-    )
+    if ey is not None:
+        # Step 3: Keep only the largest events, on average `ey` per year.  The
+        # index is reset here because extract_initial_states looks its rows up
+        # by label.
+        events_summary = threshold_events_by_ey(
+            events_summary, len(df_processed), ey=ey, rank_by=rank_by,
+            dt_hours=dt_hours,
+        )
 
-    if idx:
-        eventsidx = np.array([]).astype(int)
-        for i in range(len(events_summary)):
-            eventsidx = np.append(eventsidx,
-                np.arange(
-                events_summary["start"].iloc[i],
-                events_summary["end"].iloc[i]+1
+        if idx:
+            eventsidx = np.array([]).astype(int)
+            for i in range(len(events_summary)):
+                eventsidx = np.append(eventsidx,
+                    np.arange(
+                    events_summary["start"].iloc[i],
+                    events_summary["end"].iloc[i]+1
+                    )
                 )
-            )
 
-        return df_processed, events_summary, eventsidx
+            return df_processed, events_summary, eventsidx
 
-    else:
-        return df_processed, events_summary
+    return df_processed, events_summary
+
+def events_WRT_rainfall(rdata, events_summary, ey=6):
+    df = pd.read_csv(rdata, index_col=0, parse_dates=True, dayfirst=True)
+    # Identify 3 day rainfall maxima 
+    nyears = df.index.year.nunique()
+    prec3d = df['prec'].resample('3D', label='left').sum()
+    idxmaxs = prec3d.nlargest(ey*nyears).index.sort_values()
+    
+    # Identify runoff events starting after beginning of rainfall events
+    start_times = df.iloc[events_summary.start].index #flow
+    end_times = df.iloc[events_summary.end].index # flow
+    targets = idxmaxs # rainfall
+    idx = np.searchsorted(start_times, targets, side='right')   # first index strictly after
+
+    # Ensure runoff begins within 3 days of start of rainfall event
+    # if not set t_rise and t_ends to 3 day rainfall event bounds
+    t_rises = start_times[idx].normalize()
+    t_ends = end_times[idx]
+    bool_mask = t_rises > targets + pd.Timedelta(days=3)
+    t_rises = np.where(bool_mask, targets, t_rises)
+    t_ends = np.where(bool_mask, targets + pd.Timedelta(days=3), t_ends)
+
+    # the start of the event was defined as the first day of rainfall > 1 mm 
+    # occurring prior to the rise in streamflow that occurred either during or 
+    # before the three -day rainfall event
+    p_thresh = 1  # mm
+    max_lookback = pd.Timedelta(days=10)
+    prec1d = df['prec'].resample('D').sum()  # convert hourly to daily rainfall
+    t_starts = []
+    for i, t_rise in enumerate(t_rises):
+        t = t_rise
+        if bool_mask[i]:
+            while t > t_rise - max_lookback and prec1d.loc[(t - pd.Timedelta(days=1)).strftime('%Y-%m-%d')] > p_thresh:
+                t = t - pd.Timedelta(days=1)
+        t_starts.append(t)
+    t_starts = pd.to_datetime(t_starts)
+
+    eventsidx = np.array([]).astype(int)
+    t_startsidx = []
+    for i in range(len(t_starts)):
+        t_startid = df.index.get_loc(t_starts[i])
+        t_endid = df.index.get_loc(t_ends[i])
+        t_startsidx.append(t_startid)
+        eventsidx = np.append(
+            eventsidx, np.arange(t_startid, t_endid+1)
+        )
+
+    events_summary = events_summary.iloc[idx]
+    events_summary['start'] = t_startsidx
+    events_summary.reset_index(inplace=True)
+
+    return events_summary, eventsidx
 
 
 def extract_initial_states(states, events_summary, pre_event=24):
@@ -461,7 +513,7 @@ def extract_initial_states(states, events_summary, pre_event=24):
 
     # Analyze pre-event windows using 0-based sliding slices
     for i in range(nevents):
-        max_idx = qobs_max[i]
+        max_idx = qobs_max.iloc[i]
 
         # Define window boundaries
         start_win = max(0, max_idx - pre_event + 1)
