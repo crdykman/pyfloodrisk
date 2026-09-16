@@ -59,13 +59,15 @@ __all__ = [
 ]
 
 #: The demo station used when none is named.
-DEMO_STATION = "117002A"
+DEMO_STATION = "303203"
 
 DEMO_PARAMETERS: dict[str, dict[str, float]] = {
-    "117002A": {"ps0": 0.5, "rs0": 0.5, "x1": 7.67458, "x2": -9.52235,
-                "x3": 26.5717, "x4": 40.5907},
-    "405214": {"ps0": 0.5, "rs0": 0.5, "x1": 1469.93, "x2": -8.48264,
-               "x3": 210.0908, "x4": 16.6404},
+    "117002A": {"ps0": 0.5, "rs0": 0.5, "x1": 125.78, "x2": -7.94253,
+                "x3": 31.1227, "x4": 21.237},
+    "405214":  {"ps0": 0.5, "rs0": 0.5, "x1": 611.41, "x2": -8.12765,
+                "x3": 111.418, "x4": 12.2814},
+    "303203":  {"ps0": 0.5, "rs0": 0.5, "x1": 36.0292, "x2": -1.58247,
+                "x3": 134.811, "x4": 17.4297},
 }
 
 
@@ -454,7 +456,7 @@ def run_dffa(
     patterns = station_patterns(station)
     curve = station_ifd(station) if ifd is None else ifd
     strat = stratification or Stratification.uniform_in_z(
-        aep_max=0.9, aep_min=1e-5, n_strata=25, n_per_stratum=60)
+        aep_max=0.9, aep_min=2e-2, n_strata=50, n_per_stratum=100)
 
     config = MCSConfig(area_km2=area, durations_h=tuple(durations_h),
                        dt_hours=1.0, seed=seed, progress=progress,

@@ -17,6 +17,8 @@ import pandas as pd
 DEMO_TP_REGIONS: dict[str, str] = {
     "117002A": "WT",     # Wet Tropics, QLD
     "405214": "MB",      # Murray Basin, VIC
+    "303203": "SStas",   # Southern Slopes, TAS
+    
 }
 
 #: Burst durations (hours) the bundled *areal* temporal patterns cover.  ARR
@@ -48,7 +50,8 @@ TP_DURATIONS_H: tuple[int, ...] = POINT_TP_DURATIONS_H + AREAL_TP_DURATIONS_H
 #: Victorian uplands near Mansfield (-37.16, 146.11).
 DEMO_ARF_REGIONS: dict[str, str] = {
     "117002A": "East Coast North",
-    "405214": "Southern Temperate",
+    "405214":  "Southern Temperate",
+    "303203":  "Tasmania",
 }
 
 
@@ -184,5 +187,6 @@ def catchment_data(station: str) -> float:
     metadata = {
         "117002A": {"area": 255.2},
         "405214" : {"area": 357.4},
+        "303203" : {"area": 51.5},
     }
     return metadata[station]["area"]
