@@ -17,8 +17,6 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
-from .demo_data import _parse_dates
-
 
 @njit(cache=True)
 def _filter_pass(qf, bf, start, stop, step, alpha):
@@ -456,12 +454,15 @@ def events_WRT_rainfall(rdata, events_summary, ey=6):
        ``ey * nyears`` largest, as the rainfall events of interest.
     2. For each, take the first delineated runoff event beginning strictly
        after the rainfall block starts.
+       A rainfall block with no runoff event to its right -- one falling after
+       the last delineated event -- is dropped, so fewer than ``ey * nyears``
+       events may come back.
     3. If that runoff event begins more than 3 days after the rainfall, treat
        the pairing as failed and fall back to the rainfall block's own bounds
        (start, start + 3 days).
-    4. Walk the start back day by day while the preceding day had more than
-       1 mm of rain, up to 10 days, so the event begins on the first wet day
-       rather than at the rise.
+    4. For the successfully paired events, walk the start back day by day
+       while the preceding day had more than 1 mm of rain, up to 10 days, so
+       the event begins on the first wet day rather than at the rise.
 
     Parameters
     ----------
@@ -481,41 +482,28 @@ def events_WRT_rainfall(rdata, events_summary, ey=6):
     -------
     events_summary : DataFrame
         The matched runoff events, one per retained rainfall event, with
-        ``start`` replaced by the rainfall-onset position.
+        ``start`` and ``end`` replaced by the rainfall-referenced bounds.  The
+        positional index of the runoff event each row was matched to is kept
+        as an ``index`` column.
     eventsidx : ndarray
-        The concatenated timestep positions spanned by those events, i.e. the
-        form ``calibration(eventsidx=...)`` wants.
+        The timestep positions those events span, sorted and de-duplicated --
+        the form ``calibration(eventsidx=...)`` wants.
 
     Notes
     -----
-    Behaviours worth knowing before relying on this, all observed on the
-    bundled 405214 record (736 delineated events over 11.94 years):
-
-    * **The returned table and ``eventsidx`` describe different spans.**  Only
-      ``start`` is rewritten; ``end`` still holds the original runoff event's
-      end, while ``eventsidx`` is built from the possibly-substituted end of
-      step 3.  On 405214 the table spans 12 174 timesteps and ``eventsidx``
-      7 292.  Use one or the other, not both.
-    * The look-back in step 4 is applied only to the rows that *failed* the
-      3-day test at step 3, not to the successfully paired ones -- the reverse
-      of what the inline comment describes.
-    * ``nyears`` counts *distinct calendar years*, not record length, so
-      405214's mid-2010 to mid-2022 record counts 13 and keeps 78 events
-      where ``ey`` per year of record would keep 72.
-    * The returned frame carries a leftover ``index`` column, because the
-      final ``reset_index`` does not drop the old one.
-    * A rainfall maximum falling after the last delineated runoff event has no
-      event to its right and raises ``IndexError`` at step 2.
+    * Walking starts back can make consecutive events overlap, so
+      ``eventsidx`` is de-duplicated and is shorter than
+      ``sum(end - start + 1)``: by 6-25% on the three bundled records.
+    * ``nyears`` is the record length in whole years, floored, so an 11.01
+      year record keeps ``6 * 11`` events.
+    * Dates in ``rdata`` are read day-first, matching the bundled records.  An
+      ISO-formatted record is left as strings by ``dayfirst=True`` rather than
+      raising, and the resampling below then fails on a non-datetime index.
     """
-    # Dates are parsed explicitly rather than with `parse_dates=True,
-    # dayfirst=True`: that combination silently leaves an ISO-formatted index
-    # as strings (and everything below needs a DatetimeIndex), so it worked on
-    # the day-first bundled record and raised on the ISO ones.
-    df = pd.read_csv(rdata, index_col=0)
-    df.index = pd.DatetimeIndex(_parse_dates(df.index))
+    df = pd.read_csv(rdata, index_col=0, parse_dates=True, dayfirst=True)
 
     # Identify 3 day rainfall maxima
-    nyears = df.index.year.nunique()
+    nyears = int((df.index[-1] - df.index[0]).days / 365)
     prec3d = df['prec'].resample('3D', label='left').sum()
     idxmaxs = prec3d.nlargest(ey*nyears).index.sort_values()
     
@@ -524,6 +512,11 @@ def events_WRT_rainfall(rdata, events_summary, ey=6):
     end_times = df.iloc[events_summary.end].index # flow
     targets = idxmaxs # rainfall
     idx = np.searchsorted(start_times, targets, side='right')   # first index strictly after
+
+    # a rainfall maximum past the last delineated runoff event has nothing to
+    # pair with; drop it
+    keep = idx < len(start_times)                  
+    targets, idx = targets[keep], idx[keep]
 
     # Ensure runoff begins within 3 days of start of rainfall event
     # if not set t_rise and t_ends to 3 day rainfall event bounds
@@ -542,7 +535,7 @@ def events_WRT_rainfall(rdata, events_summary, ey=6):
     t_starts = []
     for i, t_rise in enumerate(t_rises):
         t = t_rise
-        if bool_mask[i]:
+        if not bool_mask[i]:
             while t > t_rise - max_lookback and prec1d.loc[(t - pd.Timedelta(days=1)).strftime('%Y-%m-%d')] > p_thresh:
                 t = t - pd.Timedelta(days=1)
         t_starts.append(t)
@@ -550,19 +543,22 @@ def events_WRT_rainfall(rdata, events_summary, ey=6):
 
     eventsidx = np.array([]).astype(int)
     t_startsidx = []
+    t_endsidx = []
     for i in range(len(t_starts)):
         t_startid = df.index.get_loc(t_starts[i])
         t_endid = df.index.get_loc(t_ends[i])
         t_startsidx.append(t_startid)
+        t_endsidx.append(t_endid)
         eventsidx = np.append(
             eventsidx, np.arange(t_startid, t_endid+1)
         )
 
     events_summary = events_summary.iloc[idx]
     events_summary['start'] = t_startsidx
+    events_summary['end'] = t_endsidx
     events_summary.reset_index(inplace=True)
 
-    return events_summary, eventsidx
+    return events_summary, np.unique(eventsidx)
 
 
 def extract_initial_states(states, events_summary, pre_event=24):

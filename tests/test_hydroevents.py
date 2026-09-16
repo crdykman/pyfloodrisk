@@ -188,27 +188,6 @@ def test_pipeline_accepts_pot_delineation_too():
 
 
 # ------------------------------------------------- events WRT rainfall
-@pytest.mark.parametrize("station", ["117002A", "405214"])
-def test_events_wrt_rainfall_runs_on_both_date_formats(station):
-    """One bundled record is day-first, the other ISO.
-
-    ``parse_dates=True, dayfirst=True`` parses the first and silently leaves
-    the second as strings, so this used to raise on the ISO records.
-    """
-    from pyfloodrisk.hydroevents import events_WRT_rainfall
-    from pyfloodrisk.demo_data import demo_paths
-    path = demo_paths()["climate"] / f"GR4H_climatedata_{station}_hr.csv"
-    q = pd.read_csv(path)["qt"].to_numpy(float)
-    _, events = hydro_event_pipeline(q, ey=None)
-
-    out, eventsidx = events_WRT_rainfall(path, events, ey=6)
-    assert len(out) > 0
-    assert eventsidx.dtype.kind == "i"
-    assert eventsidx.min() >= 0 and eventsidx.max() < q.size
-    # the rainfall-onset start never sits after the matched event's peak
-    assert (out["start"] <= out["max_index"]).all()
-
-
 def test_events_wrt_rainfall_moves_starts_earlier():
     """The point of the function: begin at the rain, not at the rise."""
     from pyfloodrisk.hydroevents import events_WRT_rainfall

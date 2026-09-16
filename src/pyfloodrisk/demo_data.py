@@ -100,22 +100,6 @@ def station_arf_region(station: str) -> str:
         ) from None
 
 
-def _parse_dates(values) -> pd.Series:
-    """Parse a demo date column, whichever way round the bundled file writes it.
-
-    The bundled climate files are not consistent: one is ISO
-    (``2010-07-06 16:00:00``), the other is day-first
-    (``1/01/2012 0:00``).  ISO is tried first because it is unambiguous;
-    anything else is read day-first, which is the Australian convention
-    these files come in.
-    """
-    values = pd.Series(values)
-    try:
-        return pd.to_datetime(values, format="ISO8601")
-    except (ValueError, TypeError):
-        return pd.to_datetime(values, dayfirst=True)
-
-
 def list_demo_stations() -> list[str]:
     """Return station IDs available in the bundled demo data."""
     climate_dir = demo_paths()["climate"]
@@ -161,7 +145,8 @@ def load_demo_station_data(stations: list[str] | str | None = None) -> pd.DataFr
                 f"climate file for station {station} is missing column(s) "
                 f"{missing}; got {list(raw.columns)}")
         tbl = pd.DataFrame({
-            "Date": _parse_dates(raw[raw.columns[0]]).dt.tz_localize("UTC"),
+            "Date": pd.to_datetime(raw[raw.columns[0]],
+                                   dayfirst=True).dt.tz_localize("UTC"),
             "PET": raw[names["pet"]].to_numpy(float),
             "PREC": raw[names["prec"]].to_numpy(float),
             "Q": raw[names["qt"]].to_numpy(float),

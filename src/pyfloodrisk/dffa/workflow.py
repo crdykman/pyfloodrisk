@@ -34,7 +34,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from ..demo_data import (AREAL_TP_FROM_H, POINT_TP_DURATIONS_H, _parse_dates,
+from ..demo_data import (AREAL_TP_FROM_H, POINT_TP_DURATIONS_H,
                          catchment_data, demo_paths, station_arf_region,
                          station_tp_region)
 from ..design_storm import _pick_increment_file
@@ -85,7 +85,7 @@ def load_station_forcings(station: str = DEMO_STATION) -> pd.DataFrame:
         raise FileNotFoundError(f"Missing demo climate file for station {station}.")
     df = pd.read_csv(path)
     date_col = df.columns[0]
-    df[date_col] = _parse_dates(df[date_col])
+    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True)
     return df.set_index(date_col).rename_axis("date")
 
 
