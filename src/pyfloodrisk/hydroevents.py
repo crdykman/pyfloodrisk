@@ -6,10 +6,11 @@ peaks-over-threshold (POT) or local-maxima method, and extraction of
 antecedent model states at each delineated event for design flood
 simulation.
 
-Delineation finds every rise in the series, most of which are not floods,
-so :func:`hydro_event_pipeline` trims the list to an exceedance-per-year
-rate -- by default the six largest events per year of record, ranked on
-peak flow or on event volume (:func:`threshold_events_by_ey`).
+Delineation finds every rise in the series, most of which are not floods, so
+:func:`hydro_event_pipeline` can trim the list to an exceedance-per-year rate
+-- ``ey=6`` keeps the six largest events per year of record, ranked on peak
+flow or on event volume (:func:`threshold_events_by_ey`).  That trimming is
+opt-in: the default ``ey=None`` returns every rise.
 """
 
 import numpy as np
@@ -354,17 +355,23 @@ def hydro_event_pipeline(
         (:func:`event_POT` or :func:`event_maxima`).
     alpha, passes, r :
         Passed through to :func:`baseflow_b`.
-    ey : int or None, optional
+    ey : float or None, optional
         Keep only the largest events, ``ey`` of them per year of record on
-        average. Default 6, i.e. the six largest events per year; pass
-        ``None`` to keep every delineated event. See
-        :func:`threshold_events_by_ey`.
+        average -- ``ey=6`` keeps the six largest per year, the usual
+        starting point for a partial duration series.  **Default ``None``,
+        which keeps every delineated event**, most of which are too small to
+        be floods.  See :func:`threshold_events_by_ey`.
     rank_by : {"peak", "volume"}, optional
         Whether "largest" means largest peak flow or largest event volume.
-        Default ``"peak"``.
+        Only consulted when ``ey`` is given.  Default ``"peak"``.
     dt_hours : float, optional
         Timestep of ``q_array`` in hours, used to convert its length to
-        years. Default 1.0 (hourly).
+        years.  Only consulted when ``ey`` is given.  Default 1.0 (hourly).
+    idx : bool, optional
+        Also return the timestep indices spanned by the retained events, as
+        one flat array -- the form ``calibration(eventsidx=...)`` wants.
+        Only available when ``ey`` is given, since it is built from the
+        retained events.
 
     Returns
     -------
@@ -373,6 +380,9 @@ def hydro_event_pipeline(
     events_summary : DataFrame
         The retained events in chronological order, with a reset index;
         see :func:`event_POT`/:func:`event_maxima` for the columns.
+    eventsidx : ndarray
+        Only when ``idx`` and ``ey`` are both given: the concatenated
+        ``start..end`` indices of every retained event.
     """
     if method_kwargs is None:
         method_kwargs = {}

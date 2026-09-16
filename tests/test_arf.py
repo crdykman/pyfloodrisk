@@ -171,7 +171,7 @@ def _demo_table(station="117002A"):
     return ifd_table_from_bom_csv(demo_paths()["ifd"] / f"{station}_ifds.csv")
 
 
-@pytest.mark.parametrize("station", ["117002A", "405214"])
+@pytest.mark.parametrize("station", ["117002A", "303203", "405214"])
 def test_arithmetic_and_log_agree_inside_the_tabulated_range(station):
     """ARR 4.2.1 prefers the arithmetic-normal domain; inside the table it
     barely matters, which is the point worth pinning."""

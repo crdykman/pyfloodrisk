@@ -127,9 +127,17 @@ def test_bad_arguments_are_rejected():
 
 
 # --------------------------------------------------------- through the pipeline
-def test_pipeline_applies_the_ey_default():
-    q, n_pulses = _synthetic_hydrograph(n_years=2.0)
-    _, events = hydro_event_pipeline(q)
+def test_pipeline_keeps_every_event_by_default():
+    """Trimming is opt-in: the default returns every delineated rise."""
+    q, _ = _synthetic_hydrograph(n_years=2.0)
+    _, default = hydro_event_pipeline(q)
+    _, explicit_none = hydro_event_pipeline(q, ey=None)
+    assert len(default) == len(explicit_none) > 12
+
+
+def test_pipeline_applies_ey_when_asked():
+    q, _ = _synthetic_hydrograph(n_years=2.0)
+    _, events = hydro_event_pipeline(q, ey=6)
     _, unthresholded = hydro_event_pipeline(q, ey=None)
     # the record holds far more rises than 6 EY admits
     assert len(unthresholded) > 12
@@ -140,17 +148,29 @@ def test_pipeline_applies_the_ey_default():
 
 def test_pipeline_ranks_by_volume_when_asked():
     q, _ = _synthetic_hydrograph(n_years=2.0)
-    by_peak = hydro_event_pipeline(q, rank_by="peak")[1]
-    by_volume = hydro_event_pipeline(q, rank_by="volume")[1]
+    by_peak = hydro_event_pipeline(q, ey=6, rank_by="peak")[1]
+    by_volume = hydro_event_pipeline(q, ey=6, rank_by="volume")[1]
     assert len(by_peak) == len(by_volume) == 12
     assert by_volume["sum"].sum() >= by_peak["sum"].sum()
     assert by_peak["max"].sum() >= by_volume["max"].sum()
 
 
+def test_pipeline_can_return_the_event_timestep_indices():
+    """``idx=True`` gives the form ``calibration(eventsidx=...)`` wants."""
+    q, _ = _synthetic_hydrograph(n_years=2.0)
+    _, events, eventsidx = hydro_event_pipeline(q, ey=6, idx=True)
+    assert eventsidx.dtype.kind == "i"
+    # every retained event contributes its whole start..end span, once
+    expected = sum(int(e) - int(s) + 1
+                   for s, e in zip(events["start"], events["end"]))
+    assert eventsidx.size == expected
+    assert eventsidx.min() >= 0 and eventsidx.max() < q.size
+
+
 def test_pipeline_events_feed_extract_initial_states():
     """The reset index is what makes this work; without it it raises."""
     q, _ = _synthetic_hydrograph(n_years=2.0)
-    _, events = hydro_event_pipeline(q)
+    _, events = hydro_event_pipeline(q, ey=6)
     states = np.vstack([np.linspace(0.2, 0.8, q.size),
                         np.linspace(0.3, 0.7, q.size)])
     onsets = extract_initial_states(states, events, pre_event=24)
@@ -161,6 +181,7 @@ def test_pipeline_events_feed_extract_initial_states():
 def test_pipeline_accepts_pot_delineation_too():
     q, _ = _synthetic_hydrograph(n_years=2.0)
     _, events = hydro_event_pipeline(
-        q, event_method="POT", method_kwargs={"threshold": 0.5, "min_diff": 24})
+        q, event_method="POT", ey=6,
+        method_kwargs={"threshold": 0.5, "min_diff": 24})
     assert len(events) == 12
     assert events["start"].is_monotonic_increasing

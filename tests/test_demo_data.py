@@ -25,10 +25,10 @@ def test_demo_paths_returns_existing_root():
 
 def test_list_demo_stations_returns_known_stations():
     stations = list_demo_stations()
-    assert stations == ["117002A", "405214"]
+    assert stations == ["117002A", "303203", "405214"]
 
 
-@pytest.mark.parametrize("station", ["117002A", "405214"])
+@pytest.mark.parametrize("station", list_demo_stations())
 def test_every_demo_station_has_its_four_inputs(station):
     """Climate, IFD and temporal patterns must all be present for a station."""
     paths = demo_paths()
@@ -61,7 +61,7 @@ def test_load_demo_station_data_returns_dataframe():
     assert (df["Station"] == STATION).all()
 
 
-@pytest.mark.parametrize("station", ["117002A", "405214"])
+@pytest.mark.parametrize("station", list_demo_stations())
 def test_load_demo_station_data_maps_columns_by_name(station):
     """The bundled files disagree on column order, so position is not enough.
 
@@ -76,7 +76,7 @@ def test_load_demo_station_data_maps_columns_by_name(station):
     assert df["Q"].sum() == pytest.approx(raw["qt"].sum())
 
 
-@pytest.mark.parametrize("station", ["117002A", "405214"])
+@pytest.mark.parametrize("station", list_demo_stations())
 def test_dates_parse_to_a_gapless_hourly_record(station):
     """One file is ISO, the other day-first; both must come out hourly.
 
