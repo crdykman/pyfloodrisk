@@ -11,6 +11,10 @@ are plausible rather than calibrated, and the ARF region is a map lookup
 worth confirming -- see ``docs/dffa.md`` before reading anything into the
 numbers.
 
+Each duration gets its own initial-state distribution, drawn from the
+states the catchment was actually in immediately before its own large
+bursts of that length.
+
 Durations of 12 h and up use areal temporal patterns; 6 h uses point
 patterns, because ARR publishes no areal pattern that short.
 
@@ -26,7 +30,7 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, MCSConfig,
                               Stratification, DerivedFFA,
                               continuous_state_table, diagnostics,
                               have_pyvinecopulib, load_station_forcings,
-                              pet_climatology, state_sampler_from_run,
+                              pet_climatology, state_samplers_by_duration,
                               station_ifd, station_patterns)
 from pyfloodrisk.demo_data import catchment_data
 
@@ -40,10 +44,16 @@ def main():
     params = DEMO_PARAMETERS[STATION]          # calibrate() for real work
     forcings = load_station_forcings(STATION)
 
-    # 1. the state distribution: a continuous GR4H run over the record
+    # 1. the state distribution: a continuous GR4H run over the record, split
+    #    into one donor pool per duration.  Each pool holds the states the
+    #    catchment was actually in immediately before its own large bursts of
+    #    that length, so a 72 h storm starts from the wetness that precedes
+    #    72 h storms.  The table must be unthinned: the pools are matched to
+    #    burst onsets by timestamp.
     state_table = continuous_state_table(forcings, params, area,
-                                         warmup_hours=8760, thin=6)
-    states = state_sampler_from_run(state_table, params, method="bootstrap")
+                                         warmup_hours=8760)
+    states = state_samplers_by_duration(state_table, forcings, params,
+                                        DURATIONS_H, ey=6, method="bootstrap")
 
     # 2. rainfall: areal patterns (nearest standard area) from 12 h up,
     #    point patterns below that, and the station's BoM IFD download
@@ -63,7 +73,9 @@ def main():
                     tail_multiple=2.0, tail_min_hours=36.0,
                     store_hydrographs=24, seed=20260909)   # one per target AEP
 
-    print(f"{STATION}: {area:.0f} km2, {len(state_table)} donor states, "
+    pool = min(len(s.states) for s in states.values())
+    print(f"{STATION}: {area:.0f} km2, {pool} donor states per duration "
+          f"(from {len(state_table)} hours of continuous run), "
           f"{len(DURATIONS_H)} durations x {strat.n_events} events "
           f"= {len(DURATIONS_H) * strat.n_events} GR4H event runs")
     res = DerivedFFA(ifd, patterns, states, engine, cfg, strat,
@@ -73,7 +85,9 @@ def main():
     print(res.summary().round(1).to_string())
 
     res.to_csv("dffa_events.csv")
-    files = diagnostics.plot_all(res, outdir="figures", ifd=ifd, states=states)
+    # any one sampler will do for the inputs panel: they share x1/x3
+    files = diagnostics.plot_all(res, outdir="figures", ifd=ifd,
+                                 states=states[float(DURATIONS_H[0])])
     print("\nFigures written:", *files, sep="\n  ")
 
     compare_state_methods(ifd, patterns, state_table, params, engine, forcings)
@@ -90,6 +104,11 @@ def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
     ``bootstrap`` is the part of the design flood that depends on the
     stores being wet *together* -- which is the question a reviewer will
     ask about the state distribution.
+
+    The per-duration pool is small -- a few dozen states -- which is where
+    the choice of method bites hardest: ``bootstrap`` can only ever return
+    states the record actually contains, and resamples each of them many
+    times over.
     """
     strat = Stratification.uniform_in_z(aep_max=0.9, aep_min=1e-5,
                                         n_strata=25, n_per_stratum=40,
@@ -106,17 +125,18 @@ def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
 
     runs, taus = {}, {}
     for method in methods:
-        states = state_sampler_from_run(
-            state_table, params, method=method,
+        by_dur = state_samplers_by_duration(
+            state_table, forcings, params, [duration_h], ey=6, method=method,
             uh_profile="mean" if method == "independent_kde" else "scaled_donor")
-        runs[method] = DerivedFFA(ifd, patterns, states, engine, cfg, strat,
+        states = by_dur[float(duration_h)]
+        runs[method] = DerivedFFA(ifd, patterns, by_dur, engine, cfg, strat,
                                   pet=pet).run()
         sampled = states.sample(20000, np.random.default_rng(0))
         taus[method] = states.dependence(sampled)["tau_sampled"]
 
     table = pd.DataFrame({m: r.envelope(AEPS)["q_peak"] for m, r in runs.items()})
     print(f"\nState-sampling comparison ({duration_h:g} h storms, "
-          f"{strat.n_events} events each):")
+          f"{strat.n_events} events each, {len(states.states)} donor states):")
     print(table.round(1).to_string())
     print("\nratio to bootstrap:")
     print(table.div(table["bootstrap"], axis=0).round(3).to_string())
