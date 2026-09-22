@@ -17,7 +17,8 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, IFDCurve,
                               Stratification, continuous_state_table,
                               event_onset_states, load_station_forcings,
                               pet_climatology, run_dffa, state_sampler_from_run,
-                              station_ifd, station_patterns)
+                              state_samplers_by_duration, station_ifd,
+                              station_patterns, DerivedFFA, MCSConfig)
 from pyfloodrisk.dffa.ifd import (ARF_REGIONS, ARR2019ARF, _parse_aep,
                                   ifd_table_from_bom_csv, unit_arf)
 from pyfloodrisk.demo_data import (AREAL_TP_DURATIONS_H, DEMO_ARF_REGIONS,
@@ -407,3 +408,132 @@ def test_run_dffa_end_to_end():
     # the state distribution the events were started from is the run's own
     assert out["state_table"]["prod_store"].max() <= out["parameters"]["x1"]
     assert isinstance(out["engine"], GR4HEventEngine)
+
+
+# -------------------------------------------- per-duration state distributions
+@pytest.fixture(scope="module")
+def unthinned(forcings):
+    return continuous_state_table(forcings, PARAMS, AREA, warmup_hours=8760)
+
+
+def test_state_samplers_by_duration_conditions_on_the_duration(forcings, unthinned):
+    """A separate donor pool per duration, taken before that duration's bursts.
+
+    This is the alternative to design pre-burst rainfall: the catchment is
+    already as wet as that duration's storms typically find it.
+    """
+    durations = [6, 24, 72]
+    by_dur = state_samplers_by_duration(unthinned, forcings, PARAMS, durations,
+                                        ey=6)
+    assert sorted(by_dur) == [float(d) for d in durations]
+
+    # 6 per year over the span the state table covers, not the whole record
+    span_years = int((unthinned["date"].iloc[-1]
+                      - unthinned["date"].iloc[0]).days / 365)
+    for d in durations:
+        assert len(by_dur[float(d)].states) == 6 * span_years
+
+    # the pools genuinely differ: different durations pick different states
+    pools = [set(by_dur[float(d)].states["date"]) for d in durations]
+    assert pools[0] != pools[-1]
+
+    # and every pool is wetter than the record at large, which is the point
+    overall = unthinned["prod_store"].median()
+    for d in durations:
+        assert by_dur[float(d)].states["prod_store"].median() > overall
+
+
+def test_per_duration_samplers_keep_the_whole_state_vector(forcings, unthinned):
+    """Including UH memory -- the engine hot start needs it.
+
+    The selection is by timestamp, so whole state-table rows come through
+    rather than just the two stores.
+    """
+    by_dur = state_samplers_by_duration(unthinned, forcings, PARAMS, [24], ey=6)
+    sampler = by_dur[24.0]
+    engine = GR4HEventEngine(PARAMS, area_km2=AREA)
+    for state in sampler.to_state_dicts(sampler.sample(5, np.random.default_rng(0))):
+        assert state["uh1"].size == engine.n_uh1
+        assert state["uh2"].size == engine.n_uh2
+        assert 0 <= state["prod_store"] <= PARAMS["x1"]
+
+
+def test_state_samplers_by_duration_rejects_a_thinned_table(forcings):
+    thinned = continuous_state_table(forcings, PARAMS, AREA, warmup_hours=8760,
+                                     thin=24)
+    with pytest.raises(ValueError, match="unthinned"):
+        state_samplers_by_duration(thinned, forcings, PARAMS, [24], ey=6)
+
+
+def test_derived_ffa_accepts_a_sampler_per_duration(forcings, unthinned):
+    """The mapping is resolved per duration inside the run."""
+    durations = [12, 24]
+    by_dur = state_samplers_by_duration(unthinned, forcings, PARAMS, durations,
+                                        ey=6)
+    cfg = MCSConfig(area_km2=AREA, durations_h=durations, dt_hours=1.0,
+                    store_hydrographs=0, progress=False, seed=3)
+    run = DerivedFFA(station_ifd(STATION), station_patterns(STATION), by_dur,
+                     GR4HEventEngine(PARAMS, area_km2=AREA), cfg,
+                     Stratification.uniform_in_z(aep_max=0.9, aep_min=1e-3,
+                                                 n_strata=4, n_per_stratum=6,
+                                                 n_per_end=6))
+    assert run.states_for(12.0) is by_dur[12.0]
+    assert run.states_for(24.0) is by_dur[24.0]
+    res = run.run()
+    assert set(res.durations) == {12.0, 24.0}
+    assert (res.events["q_peak"] > 0).all()
+
+
+def test_derived_ffa_rejects_a_mapping_missing_a_duration(forcings, unthinned):
+    by_dur = state_samplers_by_duration(unthinned, forcings, PARAMS, [12], ey=6)
+    cfg = MCSConfig(area_km2=AREA, durations_h=[12, 24], dt_hours=1.0,
+                    progress=False)
+    with pytest.raises(KeyError, match="no state sampler for duration"):
+        DerivedFFA(station_ifd(STATION), station_patterns(STATION), by_dur,
+                   GR4HEventEngine(PARAMS, area_km2=AREA), cfg)
+
+
+def test_a_single_sampler_still_works_for_every_duration(unthinned):
+    """The mapping is opt-in; one sampler for all durations is unchanged."""
+    one = state_sampler_from_run(unthinned, PARAMS)
+    cfg = MCSConfig(area_km2=AREA, durations_h=[12, 24], dt_hours=1.0,
+                    progress=False)
+    run = DerivedFFA(station_ifd(STATION), station_patterns(STATION), one,
+                     GR4HEventEngine(PARAMS, area_km2=AREA), cfg)
+    assert run.states_for(12.0) is one and run.states_for(99.0) is one
+
+
+def test_shared_selection_function_drives_the_dffa_path(forcings, unthinned):
+    """``state_samplers_by_duration`` is a wrapper, not a second implementation.
+
+    Calling the main-package function directly over the same window must give
+    the same donor rows the workflow helper builds its samplers from.
+    """
+    from pyfloodrisk.hydroevents import extract_initial_states_per_duration
+
+    dates = pd.DatetimeIndex(unthinned["date"])
+    window = forcings.loc[dates.min():dates.max()]
+    pools = extract_initial_states_per_duration(window, unthinned, ey=6,
+                                                durs=(24, 72))
+    by_dur = state_samplers_by_duration(unthinned, forcings, PARAMS, [24, 72],
+                                        ey=6)
+    for d in (24.0, 72.0):
+        assert list(pools[d].columns) == list(unthinned.columns)
+        pd.testing.assert_frame_equal(
+            pools[d], by_dur[d].states[pools[d].columns])
+
+
+def test_per_duration_selection_needs_an_unthinned_dated_table(forcings, unthinned):
+    from pyfloodrisk.hydroevents import extract_initial_states_per_duration
+
+    dates = pd.DatetimeIndex(unthinned["date"])
+    window = forcings.loc[dates.min():dates.max()]
+    with pytest.raises(ValueError, match="'date' column"):
+        extract_initial_states_per_duration(window, unthinned.drop(columns="date"),
+                                            durs=(24,))
+    with pytest.raises(ValueError, match="unthinned"):
+        extract_initial_states_per_duration(window, unthinned.iloc[::24],
+                                            durs=(24,))
+    with pytest.raises(ValueError, match="at least a year"):
+        extract_initial_states_per_duration(window.iloc[:500], unthinned,
+                                            durs=(24,))

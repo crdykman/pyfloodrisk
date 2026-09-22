@@ -437,6 +437,138 @@ def hydro_event_pipeline(
 
     return df_processed, events_summary
 
+
+def initial_state_indices(prod, rout, events_summary, onset="search",
+                          pre_event=24):
+    """Positions of the antecedent state ahead of each delineated event.
+
+    Two ways of placing the onset, per ``onset``:
+
+    ``"search"``
+        Look back ``pre_event`` timesteps from the event's peak for the point
+        where both stores stop declining.  Only the *sign* of consecutive
+        differences is used, so ``prod`` and ``rout`` may be storages in mm
+        or fractions of ``x1``/``x3`` -- the result is the same either way.
+    ``"start"``
+        Take the event's delineated start, unmodified.  The stores are not
+        consulted at all, so this is the faster and more literal reading: the
+        state where the hydrograph began to rise.
+
+    Parameters
+    ----------
+    prod, rout : array_like
+        Production and routing storage over the run, one value per timestep.
+    events_summary : DataFrame
+        Output of event delineation (:func:`event_POT`/:func:`event_maxima`).
+        Needs a ``max_index`` column for ``onset="search"``, a ``start``
+        column for ``onset="start"``.
+    onset : {"search", "start"}, optional
+        How to place the onset.  Default ``"search"``.
+    pre_event : int, optional
+        Number of pre-event timesteps to inspect.  Default 24.  Ignored when
+        ``onset="start"``.
+
+    Returns
+    -------
+    ndarray of int
+        One position per event, in the order the events are listed.
+
+    Raises
+    ------
+    ValueError
+        If ``onset`` is not one of the two, if the column it needs is
+        missing, or if ``onset="start"`` and an event starts outside the
+        timesteps covered by ``prod``/``rout``.
+    """
+    prod = np.asarray(prod, dtype=float)
+    rout = np.asarray(rout, dtype=float)
+    if prod.size != rout.size:
+        raise ValueError("prod and rout must be the same length")
+    if onset not in ("search", "start"):
+        raise ValueError(f"onset must be 'search' or 'start', got {onset!r}")
+
+    col = "max_index" if onset == "search" else "start"
+    if col not in events_summary:
+        raise ValueError(f"onset={onset!r} needs a {col!r} column")
+
+    if onset == "start":
+        # taken as given, so an index off the end is the caller's error, not
+        # something to clamp away: numpy would wrap a negative one silently
+        out = np.asarray(events_summary[col], int)
+        if out.size and (out.min() < 0 or out.max() >= prod.size):
+            raise ValueError(
+                f"event starts run from {out.min()} to {out.max()}, outside "
+                f"the {prod.size} timesteps of stores given")
+        return out
+
+    out = np.empty(len(events_summary), dtype=int)
+    for i, max_idx in enumerate(np.asarray(events_summary[col], int)):
+        start_win = max(0, max_idx - pre_event + 1)
+        end_win = max_idx + 1
+        prod_match = _safe_tail_match(np.diff(prod[start_win:end_win]) < 0)
+        rout_match = _safe_tail_match(np.diff(rout[start_win:end_win]) < 0)
+        # offset from the *clamped* window start: for an event peaking within
+        # pre_event of the record start, the unclamped base is negative and
+        # lands the onset before the window it was searched in
+        idx = start_win + min(prod_match, rout_match)
+        out[i] = max(0, min(idx, prod.size - 1))
+    return out
+
+
+def extract_initial_states(states, events_summary, onset="search",
+                           pre_event=24):
+    """Extract antecedent production/routing states ahead of each event.
+
+    A lookup wrapper over :func:`initial_state_indices`: that function finds
+    the onset of each event, this one reads the two stores off it.
+
+    Parameters
+    ----------
+    states : ndarray, shape (2, n_timesteps)
+        Production storage (row 0) and routing storage (row 1).
+    events_summary : DataFrame
+        Output of event delineation (:func:`event_POT`/:func:`event_maxima`).
+    onset : {"search", "start"}, optional
+        How to place the onset; see :func:`initial_state_indices`.  Default
+        ``"search"``.
+    pre_event : int, optional
+        Number of pre-event hours to inspect. Default 24.  Ignored when
+        ``onset="start"``.
+
+    Returns
+    -------
+    DataFrame with columns ``event_id``, ``state_index``, ``Prod``,
+    ``Rout`` -- one row per event.
+
+    Notes
+    -----
+    ``Prod`` and ``Rout`` come back in **whatever units went in**.
+    ``GR4H.run`` gives fractions of ``x1``/``x3`` (columns ``ps``, ``rs``),
+    which is what :func:`~pyfloodrisk.design_flood.simulate_design_flood`
+    wants for ``ps0``/``rs0``; ``GR4H.run_from_state`` gives mm.  Pass the
+    one the consumer expects.
+    """
+    if len(events_summary) == 0:
+        return pd.DataFrame(columns=["event_id", "state_index", "Prod", "Rout"])
+
+    idx = initial_state_indices(states[0], states[1], events_summary,
+                                onset=onset, pre_event=pre_event)
+    return pd.DataFrame({
+        "event_id": np.arange(1, idx.size + 1),
+        "state_index": idx,
+        "Prod": states[0, idx],
+        "Rout": states[1, idx],
+    })
+
+
+def _safe_tail_match(boolean_array):
+    """Return the index of the last True value in boolean_array, or 0."""
+    matches = np.where(boolean_array)[0]
+    if len(matches) > 0:
+        return matches[-1]
+    return 0
+
+
 def events_WRT_rainfall(rdata, events_summary, ey=6):
     """Re-define event boundaries with respect to the rainfall that caused them.
 
@@ -561,79 +693,121 @@ def events_WRT_rainfall(rdata, events_summary, ey=6):
     return events_summary, np.unique(eventsidx)
 
 
-def extract_initial_states(states, events_summary, pre_event=24):
-    """Extract antecedent production/routing states ahead of each event.
+def rainfall_events(df, dur, nyears, ey=6):
+    """Positions of the largest ``dur``-hour rainfall bursts in the record.
 
-    For each delineated event, searches the ``pre_event`` hours leading up
-    to its peak for the point where both states stop declining, and takes
-    that point's storage values as the event's initial conditions.
+    The rainfall analogue of :func:`threshold_events_by_ey`: the record is
+    totalled into non-overlapping blocks of ``dur`` hours and the largest
+    ``ey * nyears`` of them are kept, so ``ey=6`` gives six bursts per year
+    on average.
 
     Parameters
     ----------
-    states : ndarray, shape (2, n_timesteps)
-        Production storage fraction (row 0) and routing storage fraction
-        (row 1), as returned by ``GR4H.run`` (columns ``ps``, ``rs``).
-    events_summary : DataFrame
-        Output of event delineation (:func:`event_POT`/:func:`event_maxima`),
-        must contain a ``max_index`` column.
-    pre_event : int, optional
-        Number of pre-event hours to inspect. Default 24.
+    df : DataFrame
+        Hourly forcing record, datetime-indexed, with a ``prec`` column in mm.
+    dur : int
+        Burst duration in hours.
+    nyears : int
+        Record length in years, used only to scale ``ey``.
+    ey : int, optional
+        Bursts to keep per year.  Default 6.
 
     Returns
     -------
-    DataFrame with columns ``event_id``, ``state_index``, ``Prod``,
-    ``Rout`` -- one row per event.
+    ndarray
+        Integer positions into ``df`` of each retained burst's **first**
+        timestep, in chronological order.
+
+    Notes
+    -----
+    Blocks are aligned to the resampling origin rather than to the wettest
+    window, so a burst straddling a block boundary is split between two
+    blocks and may be missed.  For a record shorter than ``ey * nyears``
+    blocks, fewer positions come back than asked for.
     """
-    qobs_max = events_summary["max_index"]
-    nevents = len(events_summary)
-
-    if nevents == 0:
-        return pd.DataFrame(columns=["event_id", "state_index", "Prod", "Rout"])
-
-    state_idx_list = []
-
-    # Analyze pre-event windows using 0-based sliding slices
-    for i in range(nevents):
-        max_idx = qobs_max.iloc[i]
-
-        # Define window boundaries
-        start_win = max(0, max_idx - pre_event + 1)
-        end_win = max_idx + 1
-
-        prod_slice = states[0, start_win:end_win]
-        rout_slice = states[1, start_win:end_win]
-
-        # Compute differences
-        diff_prod = np.diff(prod_slice) < 0
-        diff_rout = np.diff(rout_slice) < 0
-
-        # Apply tail matching logic
-        prod_match_idx = _safe_tail_match(diff_prod)
-        rout_match_idx = _safe_tail_match(diff_rout)
-
-        # Compute the concrete state index step
-        # (Using 0-based logic, min index change aligns with the step forward
-        # from window start)
-        calculated_idx = (max_idx - pre_event + 1) + min(prod_match_idx, rout_match_idx)
-
-        # Constrain boundary limits safely
-        calculated_idx = max(0, min(calculated_idx, states.shape[1] - 1))
-        state_idx_list.append(int(calculated_idx))
-
-    # Generate final output DataFrame
-    state_idx_arr = np.array(state_idx_list)
-    output_df = pd.DataFrame({
-        "event_id": np.arange(1, nevents + 1),
-        "state_index": state_idx_arr,
-        "Prod": states[0, state_idx_arr],
-        "Rout": states[1, state_idx_arr],
-    })
-    return output_df
+    prec = df['prec'].resample(f'{dur}h', label='left').sum()
+    locmax = prec.nlargest(ey*nyears).index.sort_values()
+    idxmax = df.index.get_indexer(locmax)
+    return idxmax
 
 
-def _safe_tail_match(boolean_array):
-    """Return the index of the last True value in boolean_array, or 0."""
-    matches = np.where(boolean_array)[0]
-    if len(matches) > 0:
-        return matches[-1]
-    return 0
+def extract_initial_states_per_duration(
+        forcings, states, ey=6,
+        durs=(6, 9, 12, 18, 24, 36, 48, 72, 96, 120, 144, 168)):
+    """Antecedent states immediately before the largest burst of each duration.
+
+    One distribution of initial states *per storm duration*, rather than one
+    pooled over the whole record: for each duration the largest
+    ``ey * nyears`` rainfall bursts are found (:func:`rainfall_events`) and
+    the state one timestep before each is kept.  An event of a given length
+    is then started from the wetness the catchment's own storms of that
+    length actually found it in.
+
+    Parameters
+    ----------
+    forcings : DataFrame or path
+        Hourly forcing record, datetime-indexed with a ``prec`` column in mm,
+        or a CSV of one (index in the first column, dates read day-first).
+    states : DataFrame
+        State table from a continuous run over that record, one row per
+        timestep, with a ``date`` column of timestamps.  Rows are matched to
+        burst onsets **by timestamp**, so the table must be unthinned; every
+        other column is carried through untouched, which is how a full GR4H
+        state vector -- stores *and* unit-hydrograph memory -- survives into
+        the pools.
+    ey : int, optional
+        Bursts to keep per year of record.  Default 6.
+    durs : sequence of int, optional
+        Burst durations in hours.
+
+    Returns
+    -------
+    dict
+        ``duration_h`` (float) ``-> DataFrame``, each the rows of ``states``
+        preceding that duration's bursts, chronological, index reset.
+
+    Raises
+    ------
+    ValueError
+        If ``forcings`` spans less than a year, if ``states`` has no ``date``
+        column, or if any burst onset is missing from ``states`` -- which
+        means the table is thinned, or does not cover the record.
+
+    Notes
+    -----
+    Bursts are selected over the span of ``forcings``, so trim it to the span
+    the state table covers before calling.  A continuous run usually discards
+    a warm-up year, and counting those years towards ``ey * nyears`` thins
+    every duration's pool.
+
+    Each pool holds only ``ey * nyears`` states -- 66 for six bursts a year
+    over eleven years -- while the Monte Carlo draws far more events than
+    that from it; see
+    :func:`~pyfloodrisk.dffa.workflow.state_samplers_by_duration`, which
+    wraps this function for the derived-FFA path.
+    """
+    if not isinstance(forcings, pd.DataFrame):
+        forcings = pd.read_csv(forcings, index_col=0, parse_dates=True,
+                               dayfirst=True)
+    if "date" not in states:
+        raise ValueError("states needs its 'date' column to match burst onsets")
+
+    span_days = (forcings.index[-1] - forcings.index[0]).days
+    nyears = int(span_days / 365)
+    if nyears < 1:
+        raise ValueError("need at least a year of record to select bursts "
+                         f"over; got {span_days} days")
+
+    dates = pd.DatetimeIndex(states["date"])
+    out: dict[float, pd.DataFrame] = {}
+    for dur in durs:
+        pos = rainfall_events(forcings, int(dur), nyears, ey=ey)
+        onset = forcings.index[np.maximum(pos - 1, 0)]   # state *before* it
+        keep = dates.isin(onset)
+        if int(keep.sum()) < len(onset):
+            raise ValueError(
+                f"only {int(keep.sum())} of {len(onset)} burst onsets at "
+                f"{dur} h are present in the state table; it must be "
+                "unthinned and cover the span of 'forcings'")
+        out[float(dur)] = states.loc[keep].reset_index(drop=True)
+    return out

@@ -1,28 +1,10 @@
 """
-ARR temporal patterns and pre-burst rainfall.
+ARR temporal patterns
 
 ``TemporalPatternLibrary`` holds the ARR Data Hub ensembles (10 patterns per
 duration per AEP band) and samples one at random for a given duration and
 rainfall AEP, aggregating it to the hydrological model's timestep in a
 mass-conserving way.
-
-``PreBurstSampler`` is optional but matters here.  ARR design rainfalls are
-*bursts*; in a conventional event-based Monte Carlo framework the
-embedded-burst problem is dealt with by adjusting the sampled initial loss.
-Running GR4H in event mode from a sampled
-*state* removes the loss parameter but not the problem: the state
-distribution derived from continuous simulation is a distribution of states at
-the start of a complete storm, whereas the IFD burst begins part way into one.
-Two defensible treatments:
-
-1. Prepend sampled pre-burst rainfall and let GR4H wet the stores itself
-   (``PreBurstSampler``).  Physically the cleanest and the reason for using a
-   continuous model at all.
-2. Sample the state distribution conditional on the burst having been preceded
-   by pre-burst rainfall of the sampled magnitude (see
-   :class:`pyfloodrisk.dffa.states.InitialStateSampler` conditioning).
-
-Do one or the other, not both, or you will double-count antecedent wetting.
 """
 
 from __future__ import annotations
@@ -38,7 +20,7 @@ from scipy.stats import norm
 __all__ = [
     "resample_increments",
     "TemporalPatternLibrary",
-    "PreBurstSampler",
+    # "PreBurstSampler",
     "DEFAULT_AEP_BANDS",
 ]
 
@@ -310,65 +292,65 @@ class TemporalPatternLibrary:
         return np.array(out)
 
 
-@dataclass
-class PreBurstSampler:
-    """Sample pre-burst rainfall depth as a ratio of the burst depth.
+# @dataclass
+# class PreBurstSampler:
+#     """Sample pre-burst rainfall depth as a ratio of the burst depth.
 
-    Parameters
-    ----------
-    ratio_table
-        ``DataFrame`` indexed by burst duration in hours, with columns holding
-        non-exceedance percentiles (e.g. ``[10, 25, 50, 75, 90]``) of the
-        pre-burst-to-burst depth ratio.  ARR publishes these by duration and
-        AEP; if you have the AEP dependence, pass ``ratio_tables`` instead as
-        ``{band: DataFrame}``.
-    gap_hours
-        Dry period inserted between the pre-burst rainfall and the burst.
-    duration_ratio
-        Pre-burst duration as a multiple of the burst duration.
-    shape
-        ``"uniform"`` spreads the pre-burst depth evenly, ``"increasing"`` uses
-        a linearly rising pattern (wetter immediately before the burst).
-    fixed_ratio
-        If given, use this ratio deterministically and ignore ``ratio_table``
-        (the "median pre-burst" convention).
-    """
+#     Parameters
+#     ----------
+#     ratio_table
+#         ``DataFrame`` indexed by burst duration in hours, with columns holding
+#         non-exceedance percentiles (e.g. ``[10, 25, 50, 75, 90]``) of the
+#         pre-burst-to-burst depth ratio.  ARR publishes these by duration and
+#         AEP; if you have the AEP dependence, pass ``ratio_tables`` instead as
+#         ``{band: DataFrame}``.
+#     gap_hours
+#         Dry period inserted between the pre-burst rainfall and the burst.
+#     duration_ratio
+#         Pre-burst duration as a multiple of the burst duration.
+#     shape
+#         ``"uniform"`` spreads the pre-burst depth evenly, ``"increasing"`` uses
+#         a linearly rising pattern (wetter immediately before the burst).
+#     fixed_ratio
+#         If given, use this ratio deterministically and ignore ``ratio_table``
+#         (the "median pre-burst" convention).
+#     """
 
-    ratio_table: pd.DataFrame | None = None
-    ratio_tables: Mapping[str, pd.DataFrame] | None = None
-    gap_hours: float = 0.0
-    duration_ratio: float = 1.0
-    shape: str = "uniform"
-    fixed_ratio: float | None = None
+#     ratio_table: pd.DataFrame | None = None
+#     ratio_tables: Mapping[str, pd.DataFrame] | None = None
+#     gap_hours: float = 0.0
+#     duration_ratio: float = 1.0
+#     shape: str = "uniform"
+#     fixed_ratio: float | None = None
 
-    def sample_ratio(self, duration_h: float, aep: float,
-                     rng: np.random.Generator) -> float:
-        if self.fixed_ratio is not None:
-            return float(self.fixed_ratio)
-        table = self.ratio_table
-        if self.ratio_tables is not None:
-            table = self.ratio_tables[band_for_aep(aep)]
-        if table is None:
-            return 0.0
-        pct = np.asarray([float(c) for c in table.columns], float) / 100.0
-        # interpolate the ratio's own quantile function in the normal-variate
-        # domain (smooth, monotone, sensible tails)
-        vals = np.array([np.interp(np.log(duration_h),
-                                   np.log(table.index.to_numpy(float)),
-                                   table.iloc[:, j].to_numpy(float))
-                         for j in range(table.shape[1])])
-        z = norm.ppf(pct)
-        u = rng.random()
-        return float(max(0.0, np.interp(norm.ppf(u), z, vals)))
+#     def sample_ratio(self, duration_h: float, aep: float,
+#                      rng: np.random.Generator) -> float:
+#         if self.fixed_ratio is not None:
+#             return float(self.fixed_ratio)
+#         table = self.ratio_table
+#         if self.ratio_tables is not None:
+#             table = self.ratio_tables[band_for_aep(aep)]
+#         if table is None:
+#             return 0.0
+#         pct = np.asarray([float(c) for c in table.columns], float) / 100.0
+#         # interpolate the ratio's own quantile function in the normal-variate
+#         # domain (smooth, monotone, sensible tails)
+#         vals = np.array([np.interp(np.log(duration_h),
+#                                    np.log(table.index.to_numpy(float)),
+#                                    table.iloc[:, j].to_numpy(float))
+#                          for j in range(table.shape[1])])
+#         z = norm.ppf(pct)
+#         u = rng.random()
+#         return float(max(0.0, np.interp(norm.ppf(u), z, vals)))
 
-    def series(self, burst_depth_mm: float, duration_h: float, aep: float,
-               dt_hours: float, rng: np.random.Generator):
-        """Return ``(preburst_increments_mm, ratio)`` on the model timestep."""
-        ratio = self.sample_ratio(duration_h, aep, rng)
-        depth = ratio * burst_depth_mm
-        n = max(1, int(round(self.duration_ratio * duration_h / dt_hours)))
-        if self.shape == "increasing":
-            w = np.arange(1, n + 1, dtype=float)
-        else:
-            w = np.ones(n)
-        return depth * w / w.sum(), ratio
+#     def series(self, burst_depth_mm: float, duration_h: float, aep: float,
+#                dt_hours: float, rng: np.random.Generator):
+#         """Return ``(preburst_increments_mm, ratio)`` on the model timestep."""
+#         ratio = self.sample_ratio(duration_h, aep, rng)
+#         depth = ratio * burst_depth_mm
+#         n = max(1, int(round(self.duration_ratio * duration_h / dt_hours)))
+#         if self.shape == "increasing":
+#             w = np.arange(1, n + 1, dtype=float)
+#         else:
+#             w = np.ones(n)
+#         return depth * w / w.sum(), ratio

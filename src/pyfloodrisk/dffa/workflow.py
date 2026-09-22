@@ -51,6 +51,7 @@ __all__ = [
     "continuous_state_table",
     "event_onset_states",
     "state_sampler_from_run",
+    "state_samplers_by_duration",
     "pet_climatology",
     "station_patterns",
     "station_ifd",
@@ -228,7 +229,7 @@ def event_onset_states(state_table: pd.DataFrame,
     The rows of ``state_table`` at the delineated event onsets, with an
     added ``event_id`` column.
     """
-    from ..hydroevents import extract_initial_states, hydro_event_pipeline
+    from ..hydroevents import hydro_event_pipeline, initial_state_indices
 
     gaps = pd.Series(state_table["date"]).diff().dropna().unique()
     if len(gaps) > 1 or (len(gaps) == 1 and gaps[0] != pd.Timedelta(hours=1)):
@@ -242,11 +243,13 @@ def event_onset_states(state_table: pd.DataFrame,
     if events.empty:
         raise ValueError("event delineation found no events in the run")
 
-    stores = np.vstack([state_table["prod_store"].to_numpy(float),
-                        state_table["rout_store"].to_numpy(float)])
-    onsets = extract_initial_states(stores, events, pre_event=pre_event)
-    out = state_table.iloc[onsets["state_index"].to_numpy()].copy()
-    out.insert(0, "event_id", onsets["event_id"].to_numpy())
+    # the indices are all this needs: taking the rows from the table keeps the
+    # whole state vector, where the stores alone would lose the UH memory
+    idx = initial_state_indices(state_table["prod_store"],
+                                state_table["rout_store"],
+                                events, pre_event=pre_event)
+    out = state_table.iloc[idx].copy()
+    out.insert(0, "event_id", np.arange(1, idx.size + 1))
     return out.reset_index(drop=True)
 
 
@@ -269,6 +272,74 @@ def state_sampler_from_run(state_table: pd.DataFrame,
         state_table, x1=float(parameters["x1"]), x3=float(parameters["x3"]),
         date_col="date", uh1_cols=uh1_cols or None, uh2_cols=uh2_cols or None,
         method=method, **kwargs)
+
+
+def state_samplers_by_duration(
+        state_table: pd.DataFrame,
+        forcings: pd.DataFrame,
+        parameters: Mapping[str, float],
+        durations_h: Sequence[float],
+        ey: int = 6,
+        **kwargs) -> dict[float, InitialStateSampler]:
+    """One state sampler per storm duration, conditioned on that duration.
+
+    Each duration draws its antecedent state from the states the catchment
+    was *actually* in immediately before its own large bursts: the largest
+    ``ey * nyears`` bursts of that length are found and the state table row
+    one timestep before each is kept.  This is a thin wrapper over
+    :func:`~pyfloodrisk.hydroevents.extract_initial_states_per_duration`,
+    which does the selection, and turns each pool into a sampler.
+
+    Parameters
+    ----------
+    state_table :
+        Output of :func:`continuous_state_table`, **unthinned**: the rows are
+        matched to burst onsets by timestamp, and thinning drops most of
+        them.
+    forcings :
+        The hourly record the state table was generated from; its ``prec``
+        column selects the bursts.
+    parameters :
+        GR4H parameters, as for :func:`state_sampler_from_run`.
+    durations_h :
+        Storm durations to build samplers for.  Pass the same list you give
+        :class:`~pyfloodrisk.dffa.mcs.MCSConfig`.
+    ey :
+        Bursts per year of record to condition on.  Default 6.
+    **kwargs :
+        Passed to :func:`state_sampler_from_run`, e.g. ``method="smoothed"``.
+
+    Returns
+    -------
+    dict
+        ``duration_h -> InitialStateSampler``, ready to hand to
+        :class:`~pyfloodrisk.dffa.mcs.DerivedFFA` in place of a single
+        sampler.
+
+    Notes
+    -----
+    Each pool holds only ``ey * nyears`` states -- 66 for six bursts a year
+    over eleven years -- and the Monte Carlo draws far more events than that
+    from it.  The donor pool is doing the same job as in
+    :func:`event_onset_states`, so the same caveat applies: with a pool this
+    small, ``method="bootstrap"`` resamples a handful of distinct states many
+    times over, and the smoothed or copula methods are worth comparing
+    against.
+    """
+    from ..hydroevents import extract_initial_states_per_duration
+
+    if "date" not in state_table:
+        raise ValueError("state_table needs its 'date' column to match bursts")
+    # bursts are selected over the span the state table covers, not the whole
+    # record: the warm-up the table discards has no states to draw from, and
+    # counting those years would thin the pool for every duration
+    dates = pd.DatetimeIndex(state_table["date"])
+    window = forcings.loc[dates.min():dates.max()]
+
+    pools = extract_initial_states_per_duration(
+        window, state_table, ey=ey, durs=tuple(durations_h))
+    return {duration_h: state_sampler_from_run(pool, parameters, **kwargs)
+            for duration_h, pool in pools.items()}
 
 
 def pet_climatology(forcings: pd.DataFrame, diurnal: str = "sine"
@@ -435,8 +506,7 @@ def run_dffa(
     seed, progress :
         Passed to :class:`~pyfloodrisk.dffa.mcs.MCSConfig`.
     **config_kwargs :
-        Further :class:`~pyfloodrisk.dffa.mcs.MCSConfig` fields, e.g.
-        ``preburst=PreBurstSampler(...)`` or ``tail_multiple=2.0``.
+        Further :class:`~pyfloodrisk.dffa.mcs.MCSConfig` fields
 
     Returns
     -------

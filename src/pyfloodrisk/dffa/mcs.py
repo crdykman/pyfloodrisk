@@ -11,10 +11,9 @@ Structure of one simulated event
    catchment-average depth by the ARF.
 4. A temporal pattern is drawn at random from the ARR ensemble for that duration
    and AEP band, and aggregated to the model timestep.
-5. Optional pre-burst rainfall is prepended.
-6. An initial GR4H state vector is drawn jointly from the distribution derived
+5. An initial GR4H state vector is drawn jointly from the distribution derived
    from continuous simulation.
-7. GR4H is run over the burst plus a recession tail; the peak discharge is
+6. GR4H is run over the burst plus a recession tail; the peak discharge is
    retained.
 
 The flood frequency curve is then assembled from the simulated peaks interval
@@ -51,7 +50,7 @@ import numpy as np
 import pandas as pd
 
 from .ifd import IFDCurve
-from .patterns import PreBurstSampler, TemporalPatternLibrary
+from .patterns import TemporalPatternLibrary  #, PreBurstSampler
 from .states import InitialStateSampler, PETClimatology
 from .stratification import FREQUENT_OPEN, RARE_OPEN, Stratification
 from .tpt import (ARR_FIRST_FACTOR, bootstrap_quantiles,
@@ -85,7 +84,7 @@ class MCSConfig:
     #: not sample it
     lead_hours: float = 0.0
     apply_arf: bool = True
-    preburst: PreBurstSampler | None = None
+    # preburst: PreBurstSampler | None = None
     seed: int = 20260909
     chunk_size: int = 2000
     #: whether to retain hydrographs for plotting.  Retention is by target
@@ -107,13 +106,24 @@ class DerivedFFA:
     """Assemble and run the Monte Carlo experiment."""
 
     def __init__(self, ifd: IFDCurve, patterns: TemporalPatternLibrary,
-                 states: InitialStateSampler, engine, config: MCSConfig,
+                 states: "InitialStateSampler | Mapping[float, InitialStateSampler]",
+                 engine, config: MCSConfig,
                  stratification: Stratification | None = None,
                  pet: PETClimatology | None = None,
                  state_pool_fn=None):
         self.ifd = ifd
         self.patterns = patterns
+        #: one sampler used for every duration, or ``duration_h -> sampler``
+        #: for a state distribution conditioned on the storm duration (see
+        #: :func:`~pyfloodrisk.dffa.workflow.state_samplers_by_duration`)
         self.states = states
+        if isinstance(states, Mapping):
+            missing = [d for d in config.durations_h
+                       if float(d) not in {float(k) for k in states}]
+            if missing:
+                raise KeyError(
+                    f"no state sampler for duration(s) {missing}; the mapping "
+                    f"has {sorted(float(k) for k in states)}")
         self.engine = engine
         self.cfg = config
         self.strat = stratification or Stratification.uniform_in_z()
@@ -126,6 +136,17 @@ class DerivedFFA:
             raise ValueError("engine and config timesteps differ")
 
     # ------------------------------------------------------------ assembly
+    def states_for(self, duration_h: float) -> InitialStateSampler:
+        """The state sampler this duration draws its antecedent state from."""
+        if not isinstance(self.states, Mapping):
+            return self.states
+        try:
+            return self.states[float(duration_h)]
+        except KeyError:
+            raise KeyError(
+                f"no state sampler for duration {duration_h:g} h; the mapping "
+                f"has {sorted(float(k) for k in self.states)}") from None
+
     def _tail_steps(self, duration_h: float) -> int:
         tail = (self.cfg.tail_hours if self.cfg.tail_hours is not None
                 else max(self.cfg.tail_min_hours, self.cfg.tail_multiple * duration_h))
@@ -139,17 +160,18 @@ class DerivedFFA:
 
         pre = np.zeros(0)
         ratio = 0.0
-        if self.cfg.preburst is not None:
-            pre, ratio = self.cfg.preburst.series(depth_mm, duration_h, aep, dt, rng)
-            gap = int(round(self.cfg.preburst.gap_hours / dt))
-            pre = np.concatenate([pre, np.zeros(gap)])
+        # if self.cfg.preburst is not None:
+        #     pre, ratio = self.cfg.preburst.series(depth_mm, duration_h, aep, dt, rng)
+        #     gap = int(round(self.cfg.preburst.gap_hours / dt))
+        #     pre = np.concatenate([pre, np.zeros(gap)])
 
         lead = np.zeros(int(round(self.cfg.lead_hours / dt)))
         tail = np.zeros(self._tail_steps(duration_h))
         rain = np.concatenate([lead, pre, burst, tail])
         return rain, dict(pattern_id=pat_id, pattern_band=band,
-                          pattern_index=pat_idx, preburst_ratio=ratio,
-                          preburst_depth_mm=float(pre.sum()),
+                          pattern_index=pat_idx, 
+                        #   preburst_ratio=ratio,
+                        #   preburst_depth_mm=float(pre.sum()),
                           n_steps=rain.size,
                           burst_start_step=lead.size + pre.size)
 
@@ -172,13 +194,14 @@ class DerivedFFA:
         depth = d_point * arf
 
         # initial states, optionally conditioned on the sampled rainfall
+        states = self.states_for(duration_h)
         if self.state_pool_fn is None:
-            sampled = self.states.sample(n, rng)
+            sampled = states.sample(n, rng)
         else:
-            parts = [self.states.sample(1, rng, pool=self.state_pool_fn(a, duration_h))
+            parts = [states.sample(1, rng, pool=self.state_pool_fn(a, duration_h))
                      for a in aep]
             sampled = pd.concat(parts, ignore_index=True)
-        state_dicts = self.states.to_state_dicts(sampled)
+        state_dicts = states.to_state_dicts(sampled)
 
         # hydrograph retention by target AEP: the running best match for each
         # target, as target -> (distance in log AEP, record)
@@ -218,7 +241,7 @@ class DerivedFFA:
                     donor_index=int(sampled["donor_index"].iloc[i])
                     if "donor_index" in sampled else -1,
                     **{k: m[k] for k in ("pattern_id", "pattern_band", "pattern_index",
-                                         "preburst_ratio", "preburst_depth_mm",
+                                        #  "preburst_ratio", "preburst_depth_mm",
                                          "burst_start_step", "month")}))
                 if targets:
                     la = np.log10(max(float(aep[i]), 1e-15))

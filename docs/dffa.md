@@ -13,7 +13,7 @@ empirically by the total probability theorem.
 pyfloodrisk/dffa/
   ifd.py              IFD curve fitting/inversion, CSV loader, areal reduction
   stratification.py   strata over the rainfall AEP domain, with weights
-  patterns.py         ARR temporal pattern ensembles, pre-burst rainfall
+  patterns.py         ARR temporal pattern ensembles
   states.py           joint resampling of GR4H states, PET climatology
   engine.py           EventModel interface and the GR4H wrapper
   mcs.py              the Monte Carlo driver and the results object
@@ -196,10 +196,14 @@ the difference between 265 rises (29/yr) and 54 events (6/yr), and it lifts the
 median antecedent production store by about 70% (3.8 → 6.4 mm of a 7.7 mm
 store), which is the whole point: big events start on wet catchments. It is a far smaller pool (one
 row per event rather than per hour), so it is the case where the smoothed and
-copula methods earn their keep. Conditioning
-on rainfall or on events makes the pool wetter, and the design flood larger;
-which is right depends on whether you also prepend pre-burst rainfall — do one
-or the other, not both.
+copula methods earn their keep. Conditioning on rainfall or on events makes
+the pool wetter, and the design flood larger.
+
+All three condition on *something the catchment did*, and give one pool shared
+by every storm duration. The framework conditions on the storm duration too —
+see **Bursts, not complete storms** under
+[Methodological caveats](#methodological-caveats-worth-arguing-about-in-the-paper),
+which builds a separate pool per duration from the same state table.
 
 The non-bootstrap methods model a small set of **state variables** — the two
 stores and `uh_total`, the total water in transit through the unit hydrographs.
@@ -399,15 +403,43 @@ AEP and duration) and compare the resulting curve against the independent case.
 If the difference is material, the independent case is an unquantified bias in
 the whole event-based framework, not a limitation of this code.
 
-**Bursts, not complete storms.** IFD depths are bursts, and the state
-distribution from continuous simulation is a distribution of states at the
-*start of a complete storm* — not at the start of an embedded burst. The
-conventional event-based framework patches this by adjusting the sampled
-initial loss. Here you have two cleaner options: prepend sampled pre-burst
-rainfall and let GR4H wet the stores itself (`PreBurstSampler`), or condition
-the state distribution on antecedent rainfall
-(`continuous_state_table(wet_only=True)`, or `state_pool_fn`). Doing both
-double-counts the antecedent wetting.
+**Bursts, not complete storms.** IFD depths are bursts, and a state
+distribution pooled over every hour of a continuous run is a distribution of
+states at an arbitrary moment — not at the start of a burst. The conventional
+event-based framework patches this by adjusting the sampled initial loss.
+
+Here each duration gets **its own state distribution**, drawn from the states
+the catchment was actually in immediately before its own large bursts:
+
+```python
+by_duration = state_samplers_by_duration(state_table, forcings, params,
+                                         durations_h, ey=6)
+res = DerivedFFA(ifd, tp, by_duration, engine, cfg, strat).run()
+```
+
+It returns `duration_h -> InitialStateSampler` and goes to `DerivedFFA` in
+place of a single sampler; the state table must be unthinned, since the rows
+are matched to burst onsets by timestamp. For each duration the largest
+`ey × nyears` bursts of that length are found, and the state table row one
+timestep before each is kept. A 72 h storm therefore starts from the wetness
+that precedes 72 h storms, taken from the record rather than modelled.
+
+The selection itself is `pyfloodrisk.hydroevents.extract_initial_states_per_duration`,
+which returns `duration_h -> DataFrame` of donor rows and is usable on its own;
+`state_samplers_by_duration` trims the record to the span the state table covers,
+calls it, and turns each pool into a sampler.
+
+It costs donor-pool size — each pool holds only `ey` states per year of state
+table, 60 for six a year over ten years, against tens of thousands pooled — so
+the caveats under `dependence()` above apply with force, and it is worth
+running `bootstrap` against `smoothed` before trusting the tail.
+
+On 303203 the per-duration pools are roughly twice as wet as a pooled
+distribution (median production store 12–16 mm against 7.9 mm) and lift the 1%
+AEP peak by about 10%. Note the pools get *drier* as the duration lengthens
+there, not wetter: the state is taken immediately before the burst, and a
+short burst is often already embedded in a longer wet spell, whereas a 72 h
+burst is measured from its own dry start.
 
 **Enveloping durations.** Taking the maximum over durations at each AEP is
 consistent with design practice but biases the estimate high, because the

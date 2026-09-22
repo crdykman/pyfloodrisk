@@ -55,7 +55,7 @@ from .ifd import (ARF_REGIONS, ARR2019ARF, ARR2019LongDurationARF,
                   ParabolicRareExtension,
                   DEFAULT_IFD_AEPS, IFDCurve,
                   ifd_table_from_bom_csv, unit_arf)
-from .patterns import (DEFAULT_AEP_BANDS, PreBurstSampler, TemporalPatternLibrary,
+from .patterns import (DEFAULT_AEP_BANDS, TemporalPatternLibrary, #PreBurstSampler,
                        resample_increments)
 from .states import (UH_TOTAL, InitialStateSampler, PETClimatology,
                      have_pyvinecopulib)
@@ -65,7 +65,8 @@ from .mcs import STANDARD_DURATIONS_H, DerivedFFA, DFFAResults, MCSConfig
 from .workflow import (DEMO_PARAMETERS, continuous_state_table,
                        event_onset_states, load_station_forcings,
                        pet_climatology, run_dffa, state_sampler_from_run,
-                       station_ifd, station_patterns)
+                       state_samplers_by_duration, station_ifd,
+                       station_patterns)
 from . import diagnostics, tpt
 
 __all__ = [
@@ -73,13 +74,14 @@ __all__ = [
     "ARR2019ARF", "ARF_REGIONS", "ParabolicRareExtension",
     "ifd_table_from_bom_csv",
     "DEFAULT_IFD_AEPS",
-    "TemporalPatternLibrary", "PreBurstSampler", "resample_increments",
+    "TemporalPatternLibrary", "resample_increments", #"PreBurstSampler",
     "DEFAULT_AEP_BANDS",
     "InitialStateSampler", "PETClimatology", "UH_TOTAL", "have_pyvinecopulib",
     "Stratification",
     "EventModel", "GR4HEventEngine", "mm_per_step_to_cumecs",
     "MCSConfig", "DerivedFFA", "DFFAResults", "STANDARD_DURATIONS_H",
     "continuous_state_table", "event_onset_states", "state_sampler_from_run",
+    "state_samplers_by_duration",
     "load_station_forcings",
     "pet_climatology", "station_patterns", "station_ifd", "run_dffa",
     "DEMO_PARAMETERS",

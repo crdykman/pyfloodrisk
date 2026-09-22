@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, MCSConfig,
-                              PreBurstSampler, Stratification, DerivedFFA,
+                              Stratification, DerivedFFA,
                               continuous_state_table, diagnostics,
                               have_pyvinecopulib, load_station_forcings,
                               pet_climatology, state_sampler_from_run,
@@ -61,7 +61,6 @@ def main():
                                         n_strata=30, n_per_stratum=60)
     cfg = MCSConfig(area_km2=area, durations_h=DURATIONS_H, dt_hours=1.0,
                     tail_multiple=2.0, tail_min_hours=36.0,
-                    preburst=PreBurstSampler(fixed_ratio=0.0),   # off here
                     store_hydrographs=24, seed=20260909)   # one per target AEP
 
     print(f"{STATION}: {area:.0f} km2, {len(state_table)} donor states, "

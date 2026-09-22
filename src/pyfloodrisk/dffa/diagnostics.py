@@ -300,19 +300,13 @@ def plot_inputs(results, ifd=None, states=None, fig=None):
     ax.set_title("Sampled initial states")
     ax.legend(loc="upper right")
 
-    # 4. pre-burst (or joint state scatter if pre-burst is off)
+    # 4. joint state scatter
     ax = axs[1, 1]
-    if ev["preburst_depth_mm"].max() > 0:
-        ax.hist(ev["preburst_ratio"], bins=40, color=PALETTE[2], alpha=0.9)
-        ax.set_xlabel("Pre-burst depth / burst depth")
-        ax.set_ylabel("Count")
-        ax.set_title("Sampled pre-burst ratio")
-    else:
-        ax.plot(ev["prod_store"], ev["rout_store"], ".", markersize=1.8,
-                alpha=0.35, color=PALETTE[0])
-        ax.set_xlabel("Production store (mm)")
-        ax.set_ylabel("Routing store (mm)")
-        ax.set_title("Joint initial states (no pre-burst sampled)")
+    ax.plot(ev["prod_store"], ev["rout_store"], ".", markersize=1.8,
+            alpha=0.35, color=PALETTE[0])
+    ax.set_xlabel("Production store (mm)")
+    ax.set_ylabel("Routing store (mm)")
+    ax.set_title("Joint initial states (no pre-burst sampled)")
     fig.tight_layout()
     return fig
 

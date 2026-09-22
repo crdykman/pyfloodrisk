@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from pyfloodrisk.hydroevents import (extract_initial_states,
+                                     initial_state_indices,
                                      hydro_event_pipeline,
                                      threshold_events_by_ey)
 
@@ -199,3 +200,136 @@ def test_events_wrt_rainfall_moves_starts_earlier():
     # every retained row starts no later than the runoff event it matched
     matched = events.loc[out["index"], "start"].to_numpy()
     assert (out["start"].to_numpy() <= matched).all()
+
+
+# ------------------------------------------------- initial_state_indices
+def _ramp_stores(n=60, trough=12):
+    """Stores that decline to ``trough`` then rise: the onset is the trough."""
+    prod = np.concatenate([np.linspace(10, 5, trough),
+                           np.linspace(5, 20, n - trough)])
+    return np.vstack([prod, prod.copy()])
+
+
+@pytest.mark.parametrize("peak", [5, 11, 20, 40, 55])
+def test_onset_is_searched_inside_the_clamped_window(peak):
+    """An event peaking near the record start must not land before its window.
+
+    The window is clamped at 0; the offset into it has to be measured from
+    the same place, or early events collapse onto index 0.
+    """
+    states = _ramp_stores()
+    events = pd.DataFrame({"max_index": [peak]})
+    idx = initial_state_indices(states[0], states[1], events, pre_event=24)[0]
+
+    start_win = max(0, peak - 24 + 1)
+    declining = np.diff(states[0, start_win:peak + 1]) < 0
+    expected = start_win + (np.where(declining)[0][-1] if declining.any() else 0)
+    assert idx == expected
+    assert start_win <= idx <= peak
+
+
+def test_extract_initial_states_reads_the_stores_at_those_indices():
+    """The wrapper adds lookup and nothing else."""
+    states = _ramp_stores()
+    events = pd.DataFrame({"max_index": [20, 40, 55]})
+    idx = initial_state_indices(states[0], states[1], events)
+    out = extract_initial_states(states, events)
+
+    assert list(out["state_index"]) == list(idx)
+    assert list(out["event_id"]) == [1, 2, 3]
+    np.testing.assert_allclose(out["Prod"], states[0, idx])
+    np.testing.assert_allclose(out["Rout"], states[1, idx])
+
+
+def test_onset_search_is_invariant_to_store_units():
+    """Only the sign of the differences is used, so mm and fractions agree."""
+    states = _ramp_stores()
+    events = pd.DataFrame({"max_index": [20, 40, 55]})
+    x1, x3 = 36.0292, 134.811
+    np.testing.assert_array_equal(
+        initial_state_indices(states[0], states[1], events),
+        initial_state_indices(states[0] * x1, states[1] * x3, events))
+
+
+def test_extract_initial_states_on_no_events():
+    out = extract_initial_states(_ramp_stores(),
+                                 pd.DataFrame({"max_index": []}))
+    assert out.empty
+    assert list(out.columns) == ["event_id", "state_index", "Prod", "Rout"]
+
+
+# --------------------------------------------------- onset="start"
+def test_onset_start_takes_the_delineated_start_verbatim():
+    """The replacement for the old extract_initial_states_basic."""
+    states = _ramp_stores()
+    events = pd.DataFrame({"start": [3, 18, 44], "max_index": [9, 25, 51]})
+
+    idx = initial_state_indices(states[0], states[1], events, onset="start")
+    np.testing.assert_array_equal(idx, [3, 18, 44])
+
+    out = extract_initial_states(states, events, onset="start")
+    assert list(out["state_index"]) == [3, 18, 44]
+    assert list(out["event_id"]) == [1, 2, 3]
+    np.testing.assert_allclose(out["Prod"], states[0, [3, 18, 44]])
+    # what extract_initial_states_basic used to build, index and all
+    assert list(out.index) == [0, 1, 2]
+
+
+def test_onset_start_ignores_pre_event_and_the_stores():
+    """No window search happens, so neither input can move the answer."""
+    states = _ramp_stores()
+    events = pd.DataFrame({"start": [3, 18, 44], "max_index": [9, 25, 51]})
+    base = initial_state_indices(states[0], states[1], events, onset="start")
+    np.testing.assert_array_equal(
+        base, initial_state_indices(states[0], states[1], events,
+                                    onset="start", pre_event=999))
+    np.testing.assert_array_equal(
+        base, initial_state_indices(np.zeros(states.shape[1]),
+                                    np.zeros(states.shape[1]),
+                                    events, onset="start"))
+
+
+def test_the_two_onset_modes_disagree():
+    """Otherwise the parameter would not be worth having."""
+    states = _ramp_stores()
+    events = pd.DataFrame({"start": [3, 18, 44], "max_index": [9, 25, 51]})
+    assert not np.array_equal(
+        initial_state_indices(states[0], states[1], events, onset="start"),
+        initial_state_indices(states[0], states[1], events, onset="search"))
+
+
+def test_onset_errors():
+    states = _ramp_stores()
+    events = pd.DataFrame({"start": [3, 18], "max_index": [9, 25]})
+
+    with pytest.raises(ValueError, match="'search' or 'start'"):
+        initial_state_indices(states[0], states[1], events, onset="begin")
+    with pytest.raises(ValueError, match="'start' column"):
+        initial_state_indices(states[0], states[1],
+                              events.drop(columns="start"), onset="start")
+    with pytest.raises(ValueError, match="'max_index' column"):
+        initial_state_indices(states[0], states[1],
+                              events.drop(columns="max_index"))
+    with pytest.raises(ValueError, match="same length"):
+        initial_state_indices(states[0], states[1, :-1], events)
+
+
+@pytest.mark.parametrize("bad", [-2, 10_000])
+def test_onset_start_rejects_indices_outside_the_run(bad):
+    """numpy would wrap a negative index silently; say so instead."""
+    states = _ramp_stores()
+    events = pd.DataFrame({"start": [3, bad]})
+    with pytest.raises(ValueError, match="outside the"):
+        initial_state_indices(states[0], states[1], events, onset="start")
+
+
+def test_onset_start_on_real_delineated_events():
+    """End to end: the pipeline's own 'start' column drives it."""
+    q, _ = _synthetic_hydrograph(n_years=2.0)
+    _, events = hydro_event_pipeline(q, ey=6)
+    states = np.vstack([np.linspace(0.2, 0.8, q.size),
+                        np.linspace(0.8, 0.2, q.size)])
+    out = extract_initial_states(states, events, onset="start")
+    assert len(out) == len(events)
+    np.testing.assert_array_equal(out["state_index"],
+                                  np.asarray(events["start"], int))
