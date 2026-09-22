@@ -30,7 +30,7 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, MCSConfig,
                               station_ifd, station_patterns)
 from pyfloodrisk.demo_data import catchment_data
 
-STATION = "117002A"
+STATION = "303203"
 DURATIONS_H = [6, 12, 24, 48, 72]
 AEPS = [0.1, 0.05, 0.02, 0.01, 0.005, 0.002]
 
