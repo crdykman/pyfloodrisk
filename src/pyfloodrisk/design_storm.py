@@ -12,18 +12,28 @@ import pandas as pd
 from .demo_data import catchment_data, demo_paths, station_tp_region
 
 
-# Pre-burst depths for the six standard pre-burst bands (mm)
-_PREBURST_24H = [0.0, 0.6, 1.0, 1.3, 8.2, 13.4]
+def resample_increments(inc: np.ndarray, ts_min: float, dt_min: float) -> np.ndarray:
+    """Re-express rainfall increments on a new timestep, conserving total mass.
 
+    Works for both aggregation (dt > ts, e.g. 5-minute ARR patterns to hourly
+    GR4H) and disaggregation, by linear interpolation of the cumulative mass
+    curve.  The pattern duration is padded to a whole number of new timesteps.
+    """
+    inc = np.asarray(inc, dtype=float)
+    total_min = inc.size * ts_min
+    n_new = int(np.ceil(total_min / dt_min - 1e-9))
+    t_src = np.arange(inc.size + 1) * ts_min
+    cum_src = np.concatenate([[0.0], np.cumsum(inc)])
+    t_new = np.minimum(np.arange(n_new + 1) * dt_min, total_min)
+    cum_new = np.interp(t_new, t_src, cum_src)
+    return np.diff(cum_new)
 
 def build_design_storm(
     station: str = "117002A",
     duration_hours: int = 12,
-    timestep_minutes: int = 30,
+    timestep_minutes: int | None = None,
     intensity_mm: float = 107.0,
     aep_band_index: int = 3,
-    preburst_index: int = 6,
-    preburst_factor: float = 1.0,
 ) -> dict[str, Any]:
     """Build a design storm from the bundled temporal-pattern increment files.
 
@@ -35,8 +45,12 @@ def build_design_storm(
         Storm duration in hours.  The bundled *areal* patterns only cover
         12-168 h, so 12 is the shortest available.
     timestep_minutes:
-        Temporal-pattern sub-hourly timestep in minutes.  The bundled areal
-        patterns are on a 30-minute step.
+        Increment length of the temporal patterns, in minutes.  Left as
+        ``None`` it is read from the file's own ``TimeStep`` column, which
+        is what you want: ARR coarsens the step as the storm lengthens (30
+        min at 12 h, 60 min at 18-24 h, up to 180 min at 72-168 h), so no
+        single value is right for every duration.  Pass one only to
+        override a file whose ``TimeStep`` is wrong.
     intensity_mm:
         Total storm depth (mm) across the design duration.
     aep_band_index:
@@ -44,10 +58,6 @@ def build_design_storm(
         file.  **Ignored for areal patterns**, which are published per
         standard catchment area with no AEP dependence -- there the
         ensemble is chosen by the station's own catchment area.
-    preburst_index:
-        1-based index into the pre-burst depth table.
-    preburst_factor:
-        Multiplier applied to the pre-burst depth.
 
     Returns
     -------
@@ -55,16 +65,14 @@ def build_design_storm(
 
     * ``station``
     * ``intensity_mm``
-    * ``preburst_depth``
     * ``temporal_patterns`` – hourly DataFrame (No, Date, Percent)
-    * ``rainfall_matrix`` – wide DataFrame (No, pre, <hour columns>)
-    * ``rainfall_long`` – long DataFrame (No, Time, Rain)
+    * ``rainfall_matrix`` – wide DataFrame, one row per temporal pattern:
+      ``No`` then one column per hour of the storm, in mm
     """
     root = demo_paths()["root"]
     increment_path = _pick_increment_file(root, station)
     tmp_tp = _read_increment_file(increment_path)
 
-    step_rain = duration_hours * (60 // timestep_minutes)
     duration_minutes = duration_hours * 60
 
     tmp_tp_dur = tmp_tp[tmp_tp["Duration"] == duration_minutes].copy()
@@ -75,6 +83,17 @@ def build_design_storm(
             f"No temporal patterns for a {duration_hours} h storm in "
             f"{increment_path.name}; it covers {available} h. Areal patterns "
             "only go down to 12 h.")
+
+    # ARR publishes a coarser increment as the storm lengthens, and the file
+    # states which one it used -- guessing a constant here silently truncates
+    # the pattern, or asks for increment columns that do not exist
+    ts_min = float(timestep_minutes if timestep_minutes is not None
+                   else tmp_tp_dur["TimeStep"].iloc[0])
+    if not np.isfinite(ts_min) or ts_min <= 0:
+        raise ValueError(
+            f"{increment_path.name} gives a timestep of {ts_min} min at "
+            f"{duration_hours} h; pass timestep_minutes to override it")
+    step_rain = int(round(duration_minutes / ts_min))
 
     # Point patterns are published per AEP band, areal patterns per standard
     # catchment area with no AEP dependence at all -- so which column selects
@@ -90,72 +109,51 @@ def build_design_storm(
             pd.to_numeric(tmp_tp_dur["Area"], errors="coerce").dropna())
         tp_sub = min(areas, key=lambda a: abs(a - float(catchment_data(station))))
 
-    inc_cols = [c for c in tmp_tp_dur.columns if c.startswith("Inc")][:step_rain]
+    all_inc = [c for c in tmp_tp_dur.columns if c.startswith("Inc")]
+    n_filled = int(tmp_tp_dur[all_inc].notna().any(axis=0).sum())
+    if step_rain != n_filled:
+        raise ValueError(
+            f"a {duration_hours} h storm on a {ts_min:g} min step needs "
+            f"{step_rain} increments, but {increment_path.name} holds "
+            f"{n_filled} at that duration (its own TimeStep is "
+            f"{float(tmp_tp_dur['TimeStep'].iloc[0]):g} min). Leave "
+            "timestep_minutes as None to take the file's own step.")
+    inc_cols = all_inc[:step_rain]
     tp_selected = tmp_tp_dur[tmp_tp_dur[key_col] == tp_sub][
         ["EventID", "Duration", "TimeStep", "Region", key_col] + inc_cols
     ].dropna(axis=1, how="all").reset_index(drop=True)
     tp_selected.insert(0, "No", range(1, len(tp_selected) + 1))
 
-    # Rename Inc columns to 1-based integers
-    rename = {c: str(i + 1) for i, c in enumerate(inc_cols)}
-    tp_wide = tp_selected.rename(columns=rename)
-    percent_cols = [str(i + 1) for i in range(step_rain)]
+    # Re-express the increments on the hourly step the model runs at.  A
+    # plain floor-to-the-hour and sum only works while an increment fits
+    # inside an hour; above that it drops a whole multi-hour block's depth
+    # into the block's first hour.  resample_increments interpolates the
+    # cumulative mass curve instead, so it aggregates and disaggregates
+    # alike and conserves the total.
+    pct = tp_selected[inc_cols].to_numpy(float)
+    hourly_pct = np.vstack([resample_increments(row, ts_min, 60.0)
+                            for row in pct])
 
-    tp_long = tp_wide[["No"] + percent_cols].melt(
-        id_vars="No", var_name="Time", value_name="Percent"
-    )
-    tp_long["Time"] = tp_long["Time"].astype(int)
-    tp_long = tp_long.sort_values(["No", "Time"]).reset_index(drop=True)
-
-    # Assign sub-hourly datetimes then aggregate to hourly
     origin = pd.Timestamp("2000-01-01 00:00:00", tz="UTC")
-    datetime_sub = pd.date_range(
-        origin, periods=step_rain, freq=f"{timestep_minutes}min"
-    )
-    time_to_dt = dict(zip(range(1, step_rain + 1), datetime_sub))
-    tp_long["Date"] = tp_long["Time"].map(time_to_dt)
-    tp_long["hour_key"] = tp_long["Date"].dt.floor("h")
+    hours = pd.date_range(origin, periods=hourly_pct.shape[1], freq="h")
 
-    tp_hourly = (
-        tp_long.groupby(["No", "hour_key"], as_index=False)["Percent"].sum()
-    )
-    tp_hourly.rename(columns={"hour_key": "Date"}, inplace=True)
-    tp_hourly = tp_hourly.sort_values(["No", "Date"]).reset_index(drop=True)
+    tp_hourly = pd.DataFrame({
+        "No": np.repeat(tp_selected["No"].to_numpy(), hourly_pct.shape[1]),
+        "Date": np.tile(hours, hourly_pct.shape[0]),
+        "Percent": hourly_pct.ravel(),
+    })
 
-    # Pre-burst depth
-    if preburst_index > len(_PREBURST_24H):
-        raise ValueError("Requested preburst index is out of range.")
-    preburst_depth = _PREBURST_24H[preburst_index - 1] * preburst_factor
-
-    # Build wide rainfall matrix (No, pre, hour1, hour2, …)
-    tp_pivot = tp_hourly.pivot(index="No", columns="Date", values="Percent")
-    rain_matrix = tp_pivot.values / 100.0 * intensity_mm
-    n_patterns = rain_matrix.shape[0]
-
-    col_names = ["pre"] + [str(c) for c in tp_pivot.columns]
-    rain_full = np.hstack([
-        np.full((n_patterns, 1), preburst_depth),
-        rain_matrix,
-    ])
-    rainfall_matrix = pd.DataFrame(rain_full, columns=col_names)
-    rainfall_matrix.insert(0, "No", tp_pivot.index.tolist())
-
-    # Long form
-    rainfall_long = rainfall_matrix.melt(
-        id_vars="No", var_name="Time", value_name="Rain"
-    )
-    rainfall_long["Time"] = range(len(rainfall_long))  # sequential index
-    rainfall_long = (
-        rainfall_long.sort_values(["No", "Time"]).reset_index(drop=True)
-    )
+    # Build wide rainfall matrix (No, hour1, hour2, …)
+    rain_matrix = hourly_pct / 100.0 * intensity_mm
+    col_names = [str(c) for c in hours]
+    rainfall_matrix = pd.DataFrame(rain_matrix, columns=col_names)
+    rainfall_matrix.insert(0, "No", tp_selected["No"].tolist())
 
     return {
         "station": station,
         "intensity_mm": intensity_mm,
-        "preburst_depth": preburst_depth,
         "temporal_patterns": tp_hourly,
         "rainfall_matrix": rainfall_matrix,
-        "rainfall_long": rainfall_long,
     }
 
 

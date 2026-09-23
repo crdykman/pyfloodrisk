@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
+from ..design_storm import resample_increments
+
 __all__ = [
     "resample_increments",
     "TemporalPatternLibrary",
@@ -43,22 +45,6 @@ def band_for_aep(aep: float, bands: Mapping[str, tuple[float, float]] = None) ->
             return name
     raise ValueError(f"no AEP band contains {aep}")
 
-
-def resample_increments(inc: np.ndarray, ts_min: float, dt_min: float) -> np.ndarray:
-    """Re-express rainfall increments on a new timestep, conserving total mass.
-
-    Works for both aggregation (dt > ts, e.g. 5-minute ARR patterns to hourly
-    GR4H) and disaggregation, by linear interpolation of the cumulative mass
-    curve.  The pattern duration is padded to a whole number of new timesteps.
-    """
-    inc = np.asarray(inc, dtype=float)
-    total_min = inc.size * ts_min
-    n_new = int(np.ceil(total_min / dt_min - 1e-9))
-    t_src = np.arange(inc.size + 1) * ts_min
-    cum_src = np.concatenate([[0.0], np.cumsum(inc)])
-    t_new = np.minimum(np.arange(n_new + 1) * dt_min, total_min)
-    cum_new = np.interp(t_new, t_src, cum_src)
-    return np.diff(cum_new)
 
 
 @dataclass

@@ -175,3 +175,29 @@ def catchment_data(station: str) -> float:
         "303203" : {"area": 51.5},
     }
     return metadata[station]["area"]
+
+
+#: Station the bundled examples default to.
+DEMO_STATION = "303203"
+
+
+def load_station_forcings(station: str = DEMO_STATION) -> pd.DataFrame:
+    """Load a bundled station's hourly climate record.
+
+    Returns a DataFrame indexed by timestamp with columns ``prec``, ``pet``
+    and (where present) ``qt``, i.e. the layout ``GR4H.run`` expects.  The
+    bundled files disagree on both column order and date format, which is
+    why this is not just a ``read_csv``.
+
+    See also :func:`load_demo_station_data`, which returns the same records
+    under the ``Date``/``PET``/``PREC``/``Q`` names the calibration code
+    uses, tz-localised.  The two layouts are both in use; this is the one
+    the model runs on.
+    """
+    path = demo_paths()["climate"] / f"GR4H_climatedata_{station}_hr.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing demo climate file for station {station}.")
+    df = pd.read_csv(path)
+    date_col = df.columns[0]
+    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True)
+    return df.set_index(date_col).rename_axis("date")

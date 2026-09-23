@@ -15,7 +15,7 @@ Modules
 -------
 ``ifd``             design rainfall curve, areal reduction, record-based fit
 ``stratification``  intervals over the rainfall AEP domain, with weights
-``patterns``        ARR temporal pattern ensembles, pre-burst rainfall
+``patterns``        ARR temporal pattern ensembles
 ``states``          joint resampling of GR4H states, PET climatology
 ``engine``          event-model interface and the GR4H wrappers
 ``mcs``             the Monte Carlo driver and the results object
@@ -63,10 +63,9 @@ from .stratification import Stratification
 from .engine import EventModel, GR4HEventEngine, mm_per_step_to_cumecs
 from .mcs import STANDARD_DURATIONS_H, DerivedFFA, DFFAResults, MCSConfig
 from .workflow import (DEMO_PARAMETERS, continuous_state_table,
-                       event_onset_states, load_station_forcings,
-                       pet_climatology, run_dffa, state_sampler_from_run,
-                       state_samplers_by_duration, station_ifd,
-                       station_patterns)
+                       load_station_forcings, pet_climatology, run_dffa,
+                       state_sampler_from_run, state_samplers_by_duration,
+                       station_ifd, station_patterns)
 from . import diagnostics, tpt
 
 __all__ = [
@@ -80,7 +79,7 @@ __all__ = [
     "Stratification",
     "EventModel", "GR4HEventEngine", "mm_per_step_to_cumecs",
     "MCSConfig", "DerivedFFA", "DFFAResults", "STANDARD_DURATIONS_H",
-    "continuous_state_table", "event_onset_states", "state_sampler_from_run",
+    "continuous_state_table", "state_sampler_from_run",
     "state_samplers_by_duration",
     "load_station_forcings",
     "pet_climatology", "station_patterns", "station_ifd", "run_dffa",

@@ -69,6 +69,8 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
+from ..gr4h.state_table import state_from_row
+
 __all__ = ["InitialStateSampler", "PETClimatology", "UH_TOTAL", "have_pyvinecopulib"]
 
 #: Name of the derived state variable holding total UH memory (mm).
@@ -399,14 +401,10 @@ class InitialStateSampler:
         """Convert sampled rows to the dicts the engine expects."""
         recs = []
         for _, r in sampled.iterrows():
-            s = {"prod_store": float(r[self.prod_col]),
-                 "rout_store": float(r[self.rout_col])}
+            s = state_from_row(r, self.uh1_cols or [], self.uh2_cols or [],
+                               prod_col=self.prod_col, rout_col=self.rout_col)
             if self.exp_col:
                 s["exp_store"] = float(r[self.exp_col])
-            if self.uh1_cols:
-                s["uh1"] = r[list(self.uh1_cols)].to_numpy(float)
-            if self.uh2_cols:
-                s["uh2"] = r[list(self.uh2_cols)].to_numpy(float)
             if self.date_col:
                 s["date"] = pd.Timestamp(r[self.date_col])
             recs.append(s)

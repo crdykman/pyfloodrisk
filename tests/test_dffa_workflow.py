@@ -15,8 +15,8 @@ import pytest
 
 from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, IFDCurve,
                               Stratification, continuous_state_table,
-                              event_onset_states, load_station_forcings,
-                              pet_climatology, run_dffa, state_sampler_from_run,
+                              load_station_forcings, pet_climatology, run_dffa,
+                              state_sampler_from_run,
                               state_samplers_by_duration, station_ifd,
                               station_patterns, DerivedFFA, MCSConfig)
 from pyfloodrisk.dffa.ifd import (ARF_REGIONS, ARR2019ARF, _parse_aep,
@@ -83,13 +83,6 @@ def test_state_table_respects_warmup_and_thinning(forcings):
     assert table["date"].iloc[-1] == forcings.index[expected[-1]]
 
 
-def test_state_table_wet_only_keeps_states_before_rain(forcings):
-    table = continuous_state_table(forcings, PARAMS, AREA, warmup_hours=100,
-                                   wet_only=True, min_depth_mm=0.2)
-    assert (table["prec_next"] > 0.2).all()
-    assert 0 < len(table) < len(forcings)
-
-
 def test_state_table_rows_resume_the_continuous_run(forcings, state_table):
     """The convention that makes the hot start meaningful.
 
@@ -119,25 +112,6 @@ def test_state_table_rejects_over_filtering(forcings):
     with pytest.raises(ValueError, match="no states left"):
         continuous_state_table(forcings, PARAMS, AREA,
                                warmup_hours=len(forcings) + 1)
-
-
-def test_event_onset_states_line_up_with_the_event_delineation(forcings):
-    """States at the onset of the events the continuous run itself produced."""
-    unthinned = continuous_state_table(forcings, PARAMS, AREA, warmup_hours=8760)
-    onsets = event_onset_states(unthinned, event_method="maxima")
-    assert 0 < len(onsets) < len(unthinned)
-    assert list(onsets["event_id"]) == list(range(1, len(onsets) + 1))
-    assert set(onsets.columns) - {"event_id"} == set(unthinned.columns)
-    # every onset row is a row of the state table, unchanged
-    merged = onsets.merge(unthinned, on=list(unthinned.columns), how="inner")
-    assert len(merged) == len(onsets)
-    # the delineated onsets are, on average, wetter than an arbitrary hour
-    assert onsets["prod_store"].mean() > unthinned["prod_store"].mean()
-
-
-def test_event_onset_states_reject_a_thinned_table(state_table):
-    with pytest.raises(ValueError, match="unthinned"):
-        event_onset_states(state_table)
 
 
 def test_sampler_states_fit_the_engine(state_table):
@@ -394,7 +368,7 @@ def test_run_dffa_end_to_end():
                    stratification=Stratification.uniform_in_z(
                        aep_max=0.9, aep_min=1e-4, n_strata=6, n_per_stratum=8,
                        n_per_end=8),
-                   thin=48, progress=False)
+                   progress=False)
     res = out["results"]
     assert set(res.durations) == {12.0, 24.0}
     assert len(res.events) == 2 * 8 * 8            # 6 strata + 2 open ends
@@ -405,6 +379,11 @@ def test_run_dffa_end_to_end():
     env = res.envelope(aeps)
     assert np.all(np.diff(env["q_peak"].to_numpy()) > 0)   # rarer is bigger
     assert set(env["critical_duration_h"]) <= {12.0, 24.0}
+    # one state distribution per duration, each drawn before that duration's
+    # own bursts -- not one pool shared across them
+    assert set(out["states"]) == {12.0, 24.0}
+    pools = [set(out["states"][d].states["date"]) for d in (12.0, 24.0)]
+    assert pools[0] != pools[1]
     # the state distribution the events were started from is the run's own
     assert out["state_table"]["prod_store"].max() <= out["parameters"]["x1"]
     assert isinstance(out["engine"], GR4HEventEngine)

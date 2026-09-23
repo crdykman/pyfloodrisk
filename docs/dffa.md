@@ -56,12 +56,12 @@ from pyfloodrisk.dffa import (DerivedFFA, GR4HEventEngine, IFDCurve, MCSConfig,
                               STANDARD_DURATIONS_H, Stratification,
                               TemporalPatternLibrary, continuous_state_table,
                               ifd_table_from_bom_csv, pet_climatology,
-                              state_sampler_from_run, diagnostics)
+                              state_samplers_by_duration, diagnostics)
 
 params = {"x1": X1, "x2": X2, "x3": X3, "x4": X4}     # from calibration()
-
-table  = continuous_state_table(forcings, params, AREA, warmup_hours=8760, thin=6)
-states = state_sampler_from_run(table, params, method="bootstrap")
+table  = continuous_state_table(forcings, params, AREA, warmup_hours=8760)
+states = state_samplers_by_duration(table, forcings, params,
+                                    STANDARD_DURATIONS_H, ey=6)
 engine = GR4HEventEngine(params, area_km2=AREA)
 
 ifd = IFDCurve(ifd_table_from_bom_csv("bom_ifd_download.csv"), arf=my_arf)
@@ -75,14 +75,16 @@ cfg   = MCSConfig(area_km2=AREA, durations_h=STANDARD_DURATIONS_H)
 res = DerivedFFA(ifd, tp, states, engine, cfg, strat,
                  pet=pet_climatology(forcings)).run()
 print(res.summary())
-diagnostics.plot_all(res, "figures", ifd=ifd, states=states)
+diagnostics.plot_all(res, "figures", ifd=ifd,
+                     states=states[STANDARD_DURATIONS_H[0]])
 res.to_csv("events.csv")
 ```
 
 `run_dffa(station=...)` does all of the above for a bundled demo station in one
-call. It is a demonstration, not a template: its design rainfalls are the
-bundled BoM IFD download, reduced to a catchment average by the region's ARR
-2019 ARF, and its parameters are plausible rather than calibrated.
+call, including the per-duration state pools. It is a demonstration, not a
+template: its design rainfalls are the bundled BoM IFD download, reduced to a
+catchment average by the region's ARR 2019 ARF, and its parameters are
+plausible rather than calibrated.
 
 ## The estimator
 
@@ -171,39 +173,33 @@ here (`aep_max=0.9`) are chosen to keep it small, and it is cheap to check.
 
 The state table is one row per timestep of a long continuous GR4H run, holding
 `prod_store`, `rout_store`, the UH memory and the date.
-`continuous_state_table` builds it; `thin` keeps every *n*-th row, which costs
-almost nothing because consecutive hours are nearly identical states, and
-`wet_only=True` restricts it to states at the onset of rainfall.
+`continuous_state_table` builds it, and `thin` keeps every *n*-th row.
 
-Which rows belong in the donor pool is a modelling choice, not a detail.
-Three defensible answers, in increasing order of conditioning:
+Which rows belong in the donor pool is a modelling choice, not a detail, and
+the package takes a position on it. The unconditioned pool is every hour of
+the record:
 
 ```python
 table = continuous_state_table(forcings, params, AREA, thin=6)   # any hour
-table = continuous_state_table(forcings, params, AREA, wet_only=True)  # rain starts
-table = event_onset_states(continuous_state_table(forcings, params, AREA))
 ```
 
-`event_onset_states` runs the package's own baseflow separation and event
-delineation over the continuous run's discharge and keeps the antecedent state
-ahead of each delineated event — the same operation `extract_initial_states`
-performs for the single-event workflow, so the two paths condition on the same
-thing. Delineation finds every rise, most of which are not floods, so the
-events are then trimmed to an exceedance-per-year rate — by default the 6
-largest per year of record (`ey=6`), ranked on peak flow or on event volume
-(`rank_by="peak"` or `"volume"`); `ey=None` keeps the lot. On 117002A that is
-the difference between 265 rises (29/yr) and 54 events (6/yr), and it lifts the
-median antecedent production store by about 70% (3.8 → 6.4 mm of a 7.7 mm
-store), which is the whole point: big events start on wet catchments. It is a far smaller pool (one
-row per event rather than per hour), so it is the case where the smoothed and
-copula methods earn their keep. Conditioning on rainfall or on events makes
-the pool wetter, and the design flood larger.
+That is a distribution of states at an arbitrary moment, which is not what a
+burst finds. On 303203 its median production store is 7.88 mm of a 36.03 mm
+capacity; the states immediately before the largest 12 h bursts sit at 16.18
+mm, roughly double. Sampling the arbitrary-hour pool and then correcting for
+the difference — with an initial-loss adjustment, or by prepending design
+rainfall — is the conventional route. This package conditions the pool
+instead.
 
-All three condition on *something the catchment did*, and give one pool shared
-by every storm duration. The framework conditions on the storm duration too —
-see **Bursts, not complete storms** under
-[Methodological caveats](#methodological-caveats-worth-arguing-about-in-the-paper),
-which builds a separate pool per duration from the same state table.
+So `run_dffa` and `examples/dffa_demo.py` both build a separate pool **per
+duration**, from the states preceding that duration's own bursts — see
+**Bursts, not complete storms** under
+[Methodological caveats](#methodological-caveats-worth-arguing-about-in-the-paper).
+That path needs the table **unthinned**, because pools are matched to burst
+onsets by timestamp and thinning drops most of the rows they need. `thin` is
+for the shared-pool form above and nothing else; it is safe there only
+because tens of thousands of near-identical consecutive hours make every
+sixth row lose almost nothing.
 
 The non-bootstrap methods model a small set of **state variables** — the two
 stores and `uh_total`, the total water in transit through the unit hydrographs.

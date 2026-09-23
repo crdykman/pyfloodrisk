@@ -34,11 +34,13 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from ..demo_data import (AREAL_TP_FROM_H, POINT_TP_DURATIONS_H,
-                         catchment_data, demo_paths, station_arf_region,
+from ..demo_data import (AREAL_TP_FROM_H, DEMO_STATION, POINT_TP_DURATIONS_H,
+                         catchment_data, demo_paths, load_station_forcings,
+                         station_arf_region,
                          station_tp_region)
 from ..design_storm import _pick_increment_file
 from ..gr4h.GR4H_model import GR4H
+from ..gr4h.state_table import continuous_state_table, uh_columns
 from .engine import GR4HEventEngine
 from .ifd import ARR2019ARF, IFDCurve, ifd_table_from_bom_csv
 from .mcs import DerivedFFA, MCSConfig
@@ -49,7 +51,6 @@ from .stratification import Stratification
 __all__ = [
     "load_station_forcings",
     "continuous_state_table",
-    "event_onset_states",
     "state_sampler_from_run",
     "state_samplers_by_duration",
     "pet_climatology",
@@ -59,8 +60,6 @@ __all__ = [
     "DEMO_PARAMETERS",
 ]
 
-#: The demo station used when none is named.
-DEMO_STATION = "303203"
 
 DEMO_PARAMETERS: dict[str, dict[str, float]] = {
     "117002A": {"ps0": 0.5, "rs0": 0.5, "x1": 125.78, "x2": -7.94253,
@@ -70,187 +69,6 @@ DEMO_PARAMETERS: dict[str, dict[str, float]] = {
     "303203":  {"ps0": 0.5, "rs0": 0.5, "x1": 36.0292, "x2": -1.58247,
                 "x3": 134.811, "x4": 17.4297},
 }
-
-
-# --------------------------------------------------------------- forcings
-def load_station_forcings(station: str = DEMO_STATION) -> pd.DataFrame:
-    """Load a bundled station's hourly climate record.
-
-    Returns a DataFrame indexed by timestamp with columns ``prec``, ``pet``
-    and (where present) ``qt``, i.e. the layout ``GR4H.run`` expects.  The
-    bundled files disagree on both column order and date format, which is
-    why this is not just a ``read_csv``.
-    """
-    path = demo_paths()["climate"] / f"GR4H_climatedata_{station}_hr.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"Missing demo climate file for station {station}.")
-    df = pd.read_csv(path)
-    date_col = df.columns[0]
-    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True)
-    return df.set_index(date_col).rename_axis("date")
-
-
-# ------------------------------------------------------- state distribution
-def continuous_state_table(
-    forcings: pd.DataFrame,
-    parameters: Mapping[str, float],
-    area_km2: float,
-    warmup_hours: int = 8760,
-    thin: int = 1,
-    wet_only: bool = False,
-    min_depth_mm: float = 0.0,
-) -> pd.DataFrame:
-    """Run GR4H continuously and return its state at every timestep.
-
-    This is the input with no ARR equivalent: the distribution the design
-    events' antecedent conditions are drawn from.  One row per retained
-    timestep, holding the production and routing stores in mm, the
-    unit-hydrograph memory, and the date -- exactly what
-    :class:`~pyfloodrisk.dffa.states.InitialStateSampler` consumes.
-
-    Parameters
-    ----------
-    forcings :
-        Hourly ``prec``/``pet`` (mm), datetime-indexed; see
-        :func:`load_station_forcings`.
-    parameters :
-        GR4H parameters.  ``x4`` fixes the length of the UH memory, so the
-        table is only valid for the parameter set that produced it.
-    area_km2 :
-        Catchment area (only affects the reported discharge).
-    warmup_hours :
-        Leading hours discarded, so the stores are not still relaxing from
-        their arbitrary initial values.  One year by default.
-    thin :
-        Keep every ``thin``-th row.  The states of consecutive hours are
-        nearly identical, so thinning costs almost no information and makes
-        the sampler's donor pool cheaper to hold and to fit models to.
-    wet_only :
-        Keep only rows whose *following* timestep has rainfall.  Turns the
-        table into a distribution of states at the onset of rain rather
-        than at an arbitrary hour, which is closer to the conditioning
-        implied by sampling the state at the start of a burst.
-    min_depth_mm :
-        Rainfall threshold used by ``wet_only``.
-
-    Returns
-    -------
-    DataFrame with columns ``date``, ``prod_store``, ``rout_store``,
-    ``q_cumecs``, ``prec_next``, ``uh1_0..``, ``uh2_0..``.
-
-    Notes
-    -----
-    The state on row ``t`` is the state *after* hour ``t`` has been routed,
-    so an event started from it begins at hour ``t + 1``: the same
-    convention as :func:`~pyfloodrisk.extract_initial_states`.
-    """
-    model = GR4H(area=area_km2, params=dict(parameters))
-    out = model.run_from_state(
-        forcings["prec"].to_numpy(float),
-        forcings["pet"].to_numpy(float),
-        record_uh=True,
-    )
-
-    n = len(forcings)
-    prec = forcings["prec"].to_numpy(float)
-    prec_next = np.concatenate([prec[1:], [np.nan]])
-
-    table = pd.DataFrame({
-        "date": forcings.index,
-        "prod_store": out["prod_store"],
-        "rout_store": out["rout_store"],
-        "q_cumecs": out["qt_cumecs"],
-        "prec_next": prec_next,
-    })
-    # built in one concat rather than column by column: a long x4 means a
-    # long unit hydrograph, and inserting 120-odd columns one at a time
-    # fragments the frame badly
-    uh = {f"uh1_{j}": out["uh1"][:, j] for j in range(out["uh1"].shape[1])}
-    uh.update({f"uh2_{j}": out["uh2"][:, j]
-               for j in range(out["uh2"].shape[1])})
-    table = pd.concat([table, pd.DataFrame(uh, index=table.index)], axis=1)
-
-    keep = np.zeros(n, dtype=bool)
-    keep[int(warmup_hours):] = True
-    if thin > 1:
-        thinned = np.zeros(n, dtype=bool)
-        thinned[::int(thin)] = True
-        keep &= thinned
-    if wet_only:
-        keep &= np.nan_to_num(prec_next, nan=-1.0) > float(min_depth_mm)
-    table = table.loc[keep].reset_index(drop=True)
-    if table.empty:
-        raise ValueError("no states left after warm-up/thinning/wet-only filtering")
-    return table
-
-
-def event_onset_states(state_table: pd.DataFrame,
-                       event_method: str = "maxima",
-                       method_kwargs: Mapping[str, Any] | None = None,
-                       pre_event: int = 24,
-                       alpha: float = 0.925,
-                       ey: float | None = 6.0,
-                       rank_by: str = "peak") -> pd.DataFrame:
-    """Restrict a state table to the onset of each simulated flood event.
-
-    Runs the package's event delineation
-    (:func:`~pyfloodrisk.hydro_event_pipeline`) over the continuous run's
-    own discharge and keeps the antecedent state ahead of each delineated
-    event, exactly as :func:`~pyfloodrisk.extract_initial_states` does for
-    the single-event design flood workflow.
-
-    This is the other reading of "the distribution of antecedent states":
-    not the state at an arbitrary hour, but the state at the start of the
-    events the model actually produces.  It is a much smaller donor pool --
-    one row per event rather than one per hour -- so it is the case where
-    the ``smoothed`` or copula sampling methods earn their keep over
-    ``bootstrap``.
-
-    Parameters
-    ----------
-    state_table :
-        Output of :func:`continuous_state_table`, **unthinned**: the
-        baseflow filter and the event delineation both assume consecutive
-        hourly values.
-    event_method, method_kwargs, alpha :
-        Passed to :func:`~pyfloodrisk.hydro_event_pipeline`.
-    ey, rank_by :
-        Also passed to :func:`~pyfloodrisk.hydro_event_pipeline`: keep the
-        ``ey`` largest events per year of record, ranked on peak flow or
-        event volume.  The default of 6 EY makes the donor pool the events
-        a partial duration series would keep; ``ey=None`` restores every
-        delineated rise, which is a much larger and much tamer pool.
-    pre_event :
-        Hours ahead of each peak to search for the onset; passed to
-        :func:`~pyfloodrisk.extract_initial_states`.
-
-    Returns
-    -------
-    The rows of ``state_table`` at the delineated event onsets, with an
-    added ``event_id`` column.
-    """
-    from ..hydroevents import hydro_event_pipeline, initial_state_indices
-
-    gaps = pd.Series(state_table["date"]).diff().dropna().unique()
-    if len(gaps) > 1 or (len(gaps) == 1 and gaps[0] != pd.Timedelta(hours=1)):
-        raise ValueError("event delineation needs an unthinned, hourly state "
-                         "table; call continuous_state_table with thin=1")
-
-    _, events = hydro_event_pipeline(
-        state_table["q_cumecs"].to_numpy(float), event_method=event_method,
-        method_kwargs=dict(method_kwargs) if method_kwargs else None,
-        alpha=alpha, ey=ey, rank_by=rank_by, dt_hours=1.0)
-    if events.empty:
-        raise ValueError("event delineation found no events in the run")
-
-    # the indices are all this needs: taking the rows from the table keeps the
-    # whole state vector, where the stores alone would lose the UH memory
-    idx = initial_state_indices(state_table["prod_store"],
-                                state_table["rout_store"],
-                                events, pre_event=pre_event)
-    out = state_table.iloc[idx].copy()
-    out.insert(0, "event_id", np.arange(1, idx.size + 1))
-    return out.reset_index(drop=True)
 
 
 def state_sampler_from_run(state_table: pd.DataFrame,
@@ -264,10 +82,7 @@ def state_sampler_from_run(state_table: pd.DataFrame,
     UH memory has to be the length the engine expects, and ``x1``/``x3`` have
     to be the ones the states were generated with.
     """
-    uh1_cols = sorted((c for c in state_table.columns if c.startswith("uh1_")),
-                      key=lambda c: int(c.split("_")[1]))
-    uh2_cols = sorted((c for c in state_table.columns if c.startswith("uh2_")),
-                      key=lambda c: int(c.split("_")[1]))
+    uh1_cols, uh2_cols = uh_columns(state_table)
     return InitialStateSampler(
         state_table, x1=float(parameters["x1"]), x3=float(parameters["x3"]),
         date_col="date", uh1_cols=uh1_cols or None, uh2_cols=uh2_cols or None,
@@ -320,11 +135,9 @@ def state_samplers_by_duration(
     -----
     Each pool holds only ``ey * nyears`` states -- 66 for six bursts a year
     over eleven years -- and the Monte Carlo draws far more events than that
-    from it.  The donor pool is doing the same job as in
-    :func:`event_onset_states`, so the same caveat applies: with a pool this
-    small, ``method="bootstrap"`` resamples a handful of distinct states many
-    times over, and the smoothed or copula methods are worth comparing
-    against.
+    from it.  With a pool this small, ``method="bootstrap"`` resamples a
+    handful of distinct states many times over, and the smoothed or copula
+    methods are worth comparing against.
     """
     from ..hydroevents import extract_initial_states_per_duration
 
@@ -463,7 +276,7 @@ def run_dffa(
     ifd: IFDCurve | None = None,
     stratification: Stratification | None = None,
     state_method: str = "bootstrap",
-    thin: int = 6,
+    ey: int = 6,
     warmup_hours: int = 8760,
     seed: int = 20260909,
     progress: bool = True,
@@ -472,9 +285,9 @@ def run_dffa(
     """Derived flood frequency analysis for a bundled demo station.
 
     Runs the whole chain: continuous GR4H over the station's climate record,
-    the state distribution from that run, temporal patterns from the
-    station's increments file, the bundled demonstration design rainfall
-    table, then the stratified Monte Carlo.
+    one state distribution per storm duration drawn from that run, temporal
+    patterns from the station's increments file, the bundled demonstration
+    design rainfall table, then the stratified Monte Carlo.
 
     Parameters
     ----------
@@ -500,9 +313,17 @@ def run_dffa(
         over 90% to 1 in 10^5 AEP.
     state_method :
         Initial-state sampling method; see
-        :class:`~pyfloodrisk.dffa.states.InitialStateSampler`.
-    thin, warmup_hours :
-        Passed to :func:`continuous_state_table`.
+        :class:`~pyfloodrisk.dffa.states.InitialStateSampler`.  Each
+        duration's pool holds only ``ey`` states per year of record, so
+        ``bootstrap`` resamples a small donor set many times over and the
+        smoothed or copula methods are worth comparing against.
+    ey :
+        Bursts per year of record each duration's state pool is drawn
+        from; see :func:`state_samplers_by_duration`.
+    warmup_hours :
+        Passed to :func:`continuous_state_table`.  The table is not
+        thinned: pools are matched to burst onsets by timestamp, and
+        thinning drops most of the rows they need.
     seed, progress :
         Passed to :class:`~pyfloodrisk.dffa.mcs.MCSConfig`.
     **config_kwargs :
@@ -511,16 +332,18 @@ def run_dffa(
     Returns
     -------
     dict with keys ``station``, ``parameters``, ``area_km2``,
-    ``state_table``, ``states``, ``ifd``, ``patterns``, ``engine`` and
-    ``results`` (a :class:`~pyfloodrisk.dffa.mcs.DFFAResults`).
+    ``state_table``, ``states`` (``duration_h -> InitialStateSampler``),
+    ``ifd``, ``patterns``, ``engine`` and ``results``
+    (a :class:`~pyfloodrisk.dffa.mcs.DFFAResults`).
     """
     area = catchment_data(station)
     params = dict(DEMO_PARAMETERS[station] if parameters is None else parameters)
 
     forcings = load_station_forcings(station)
     state_table = continuous_state_table(
-        forcings, params, area, warmup_hours=warmup_hours, thin=thin)
-    states = state_sampler_from_run(state_table, params, method=state_method)
+        forcings, params, area, warmup_hours=warmup_hours)
+    states = state_samplers_by_duration(state_table, forcings, params,
+                                        durations_h, ey=ey, method=state_method)
 
     engine = GR4HEventEngine(params, area_km2=area, dt_hours=1.0)
     patterns = station_patterns(station)
