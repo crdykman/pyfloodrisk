@@ -339,14 +339,20 @@ class DFFAResults:
                                  first_factor=self.first_factor)
 
     def quantiles(self, aeps: Sequence[float]) -> pd.DataFrame:
-        """Quantiles (m3/s) for every duration; columns are durations."""
+        """Quantiles (m3/s) for every duration; columns are durations.
+
+        ``aeps`` are exceedance probabilities of the *flood peak*, not of the
+        rainfall the stratification samples over.  The two differ: a 1% AEP
+        peak is produced by a mixture of rainfall AEPs interacting with the
+        antecedent state and the temporal pattern.
+        """
         aeps = np.atleast_1d(np.asarray(aeps, float))
         out = {d: self._quantile(d, aeps) for d in self.durations}
         return pd.DataFrame(out, index=pd.Index(aeps, name="aep"))
 
     def valid_aeps(self, candidates: Sequence[float], margin: float = 0.9
                    ) -> list[float]:
-        """Candidate AEPs the simulation can actually resolve.
+        """Candidate *peak* AEPs the simulation can actually resolve.
 
         Taken from the range of exceedance probabilities the estimator
         actually spans, which with the ARR end-interval closure is wider than
@@ -366,7 +372,10 @@ class DFFAResults:
         return [float(a) for a in candidates if lo / margin < a < margin * hi]
 
     def envelope(self, aeps: Sequence[float]) -> pd.DataFrame:
-        """Enveloped design quantiles and the critical duration at each AEP."""
+        """Enveloped design quantiles and the critical duration at each AEP.
+
+        ``aeps`` are peak exceedance probabilities; see :meth:`quantiles`.
+        """
         q = self.quantiles(aeps)
         vals = q.to_numpy(float)
         durs = np.asarray(q.columns, float)
@@ -418,6 +427,8 @@ class DFFAResults:
     def confidence(self, aeps, n_boot: int = 500, level: float = 0.90,
                    duration_h: float | None = None, seed: int = 7) -> pd.DataFrame:
         """Within-interval bootstrap confidence limits on the quantiles.
+
+        ``aeps`` are peak exceedance probabilities; see :meth:`quantiles`.
 
         With ``duration_h=None`` the bootstrap is applied to the critical
         duration at each AEP, which is the quantity actually reported.

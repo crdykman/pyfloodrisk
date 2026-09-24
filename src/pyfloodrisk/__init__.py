@@ -25,7 +25,7 @@ from .dffa import (
 from .hydroevents import (extract_initial_states, hydro_event_pipeline,
                          initial_state_indices)
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __all__ = [
     "DFFAResults",
     "DerivedFFA",

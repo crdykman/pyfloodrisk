@@ -75,6 +75,49 @@ def test_arr_open_ends_close_the_probability_domain():
     assert k[freq].max() == 0 and k[rare].min() == 26
 
 
+def test_within_interval_sampling_is_uniform_random_only():
+    """ARR draws uniformly inside each interval; there is no other option.
+
+    A ``within="systematic"`` mode used to place the samples at
+    equal-probability mid-points.  It bought nothing measurable -- it
+    de-noises only the rainfall dimension, while the state and the temporal
+    pattern stay random and dominate the spread -- so it went.
+    """
+    import inspect
+    from pyfloodrisk.dffa import Stratification as S
+
+    assert "within" not in S.__dataclass_fields__
+    for ctor in (S.uniform_in_z, S.uniform_in_log_aep):
+        assert "within" not in inspect.signature(ctor).parameters
+
+    # two seeds must disagree: a systematic layout would give identical sets
+    kw = dict(aep_max=0.5, aep_min=1e-6, n_strata=25, n_per_stratum=40,
+              open_ends=False)
+    a0 = S.uniform_in_z(**kw).sample(np.random.default_rng(0))[0]
+    a1 = S.uniform_in_z(**kw).sample(np.random.default_rng(1))[0]
+    assert not np.allclose(np.sort(a0), np.sort(a1))
+
+
+def test_the_constructors_place_open_ends_and_n_per_end_correctly():
+    """Guards the positional slots the removal of ``within`` shifted.
+
+    Both constructors build the dataclass positionally, so dropping a field
+    from the middle silently slides the rest along: ``open_ends`` would have
+    landed in its slot and ``n_per_end`` in ``open_ends``, giving one sample
+    per end interval with no error raised.
+    """
+    from pyfloodrisk.dffa import Stratification as S
+
+    assert list(S.__dataclass_fields__) == ["edges", "n_per_stratum",
+                                            "open_ends", "n_per_end"]
+    s = S.uniform_in_z(aep_max=0.9, aep_min=1e-4, n_strata=5,
+                       n_per_stratum=10, n_per_end=7)
+    assert s.open_ends is True and s.n_per_end == 7
+    assert s.n_events == 5 * 10 + 2 * 7
+    assert S.uniform_in_z(aep_max=0.9, aep_min=1e-4, n_strata=5,
+                          n_per_stratum=10, open_ends=False).n_intervals == 5
+
+
 def test_tpt_recovers_analytical_quantiles_on_a_closed_domain():
     """Identity model: the derived curve must equal the rainfall curve.
 
@@ -228,7 +271,7 @@ def _state_table(n=5000, x1=300.0, x3=50.0, seed=0):
     return df
 
 
-@pytest.mark.parametrize("method", ["bootstrap", "smoothed", "empirical_copula"])
+@pytest.mark.parametrize("method", ["bootstrap", "empirical_copula"])
 def test_state_sampler_preserves_bounds_and_dependence(method):
     if "copula" in method and not have_pyvinecopulib():
         pytest.skip("pyvinecopulib not installed")
@@ -404,3 +447,22 @@ def test_store_hydrographs_zero_retains_none():
 def test_store_hydrographs_caps_the_targets_kept():
     kept = _retention_run(store=2).hydrographs[12.0]
     assert [r["target_aep"] for r in kept] == [0.5, 0.2]
+
+def test_bootstrap_returns_untouched_donor_rows():
+    """The clip must not reach bootstrap: its rows are the record's own."""
+    from pyfloodrisk.dffa import (DEMO_PARAMETERS, continuous_state_table,
+                                  load_station_forcings,
+                                  state_sampler_from_run)
+    from pyfloodrisk.demo_data import catchment_data
+
+    S = "303203"
+    p = DEMO_PARAMETERS[S]
+    f = load_station_forcings(S)
+    table = continuous_state_table(f, p, catchment_data(S),
+                                   warmup_hours=8760, thin=48)
+    sampler = state_sampler_from_run(table, p, method="bootstrap")
+    drawn = sampler.sample(2000, np.random.default_rng(0))
+    # every drawn row is one of the pool's, value for value
+    cols = [c for c in table.columns if c != "date"]
+    merged = drawn[cols].merge(table[cols].drop_duplicates(), on=cols, how="inner")
+    assert len(merged) == len(drawn)

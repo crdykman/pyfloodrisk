@@ -122,7 +122,8 @@ def state_samplers_by_duration(
     ey :
         Bursts per year of record to condition on.  Default 6.
     **kwargs :
-        Passed to :func:`state_sampler_from_run`, e.g. ``method="smoothed"``.
+        Passed to :func:`state_sampler_from_run`, e.g.
+        ``method="empirical_copula"``.
 
     Returns
     -------
@@ -133,11 +134,16 @@ def state_samplers_by_duration(
 
     Notes
     -----
-    Each pool holds only ``ey * nyears`` states -- 66 for six bursts a year
-    over eleven years -- and the Monte Carlo draws far more events than that
-    from it.  With a pool this small, ``method="bootstrap"`` resamples a
-    handful of distinct states many times over, and the smoothed or copula
-    methods are worth comparing against.
+    Each pool holds only ``ey * nyears`` states -- 60 for six bursts a year
+    over ten years -- and the Monte Carlo draws far more events than that from
+    it, so ``method="bootstrap"`` resamples a handful of distinct states many
+    times over.  The copula and KDE methods fill the gaps between them, and
+    extrapolate a little past the pool's own range, which is the point of
+    using them.  They are worth comparing against: on the bundled 303203 demo
+    at 12 h, ``empirical_copula`` sits about 10% below ``bootstrap`` at 1% and
+    0.2% AEP and ``independent_kde`` 20-40% below, the gap to the latter being
+    the part of the design flood that depends on the stores being wet
+    together.
     """
     from ..hydroevents import extract_initial_states_per_duration
 
@@ -316,7 +322,7 @@ def run_dffa(
         :class:`~pyfloodrisk.dffa.states.InitialStateSampler`.  Each
         duration's pool holds only ``ey`` states per year of record, so
         ``bootstrap`` resamples a small donor set many times over and the
-        smoothed or copula methods are worth comparing against.
+        copula and KDE methods are worth comparing against.
     ey :
         Bursts per year of record each duration's state pool is drawn
         from; see :func:`state_samplers_by_duration`.

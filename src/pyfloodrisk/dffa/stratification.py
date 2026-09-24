@@ -59,13 +59,6 @@ class Stratification:
         ``M+1`` for ``M`` intermediate intervals.
     n_per_stratum
         Simulations in each intermediate interval (scalar or length-``M``).
-    within
-        ``"systematic"`` (default) places the intermediate-interval samples at
-        equal-probability mid-points — a Latin-hypercube-style layout that
-        removes within-interval sampling noise in the rainfall dimension.
-        ``"random"`` draws uniformly within the interval, which is ARR's
-        description and what you want if you are quantifying Monte Carlo
-        sampling error by repeating the whole experiment with new seeds.
     open_ends
         Include the two open-ended end intervals of ARR Section 4.3.3.3.
     n_per_end
@@ -76,7 +69,6 @@ class Stratification:
 
     edges: np.ndarray
     n_per_stratum: np.ndarray
-    within: str = "systematic"
     open_ends: bool = True
     n_per_end: int | None = None
 
@@ -90,8 +82,6 @@ class Stratification:
             np.asarray(self.n_per_stratum, dtype=int), (self.n_intermediate,)).copy()
         if self.n_per_end is None:
             self.n_per_end = int(round(self.n_per_stratum.mean()))
-        if self.within not in ("systematic", "random"):
-            raise ValueError("within must be 'systematic' or 'random'")
 
     # ----------------------------------------------------------- properties
     @property
@@ -150,20 +140,22 @@ class Stratification:
     @classmethod
     def uniform_in_z(cls, aep_max: float = 0.5, aep_min: float = 1e-6,
                      n_strata: int = 50, n_per_stratum: int = 200,
-                     within: str = "systematic", open_ends: bool = True,
+                     open_ends: bool = True,
                      n_per_end: int | None = None) -> "Stratification":
         """Intervals equally spaced in the standard normal variate (ARR default)."""
         z = np.linspace(norm.ppf(1 - aep_max), norm.ppf(1 - aep_min), n_strata + 1)
-        return cls(1.0 - norm.cdf(z), n_per_stratum, within, open_ends, n_per_end)
+        return cls(1.0 - norm.cdf(z), n_per_stratum, open_ends=open_ends,
+                   n_per_end=n_per_end)
 
     @classmethod
     def uniform_in_log_aep(cls, aep_max: float = 0.5, aep_min: float = 1e-6,
                            n_strata: int = 50, n_per_stratum: int = 200,
-                           within: str = "systematic", open_ends: bool = True,
+                           open_ends: bool = True,
                            n_per_end: int | None = None) -> "Stratification":
         """Intervals equally spaced in log(AEP) -- heavier emphasis on the tail."""
         edges = np.exp(np.linspace(np.log(aep_max), np.log(aep_min), n_strata + 1))
-        return cls(edges, n_per_stratum, within, open_ends, n_per_end)
+        return cls(edges, n_per_stratum, open_ends=open_ends,
+                   n_per_end=n_per_end)
 
     # ------------------------------------------------------------- sampling
     def sample(self, rng: np.random.Generator | None = None):
@@ -189,11 +181,7 @@ class Stratification:
             else:
                 i = j - 1 if self.open_ends else j     # index into edges
                 hi, lo = self.edges[i], self.edges[i + 1]
-                if self.within == "systematic":
-                    u = rng.permutation((np.arange(n) + 0.5) / n)
-                else:
-                    u = rng.random(n)
-                a = lo + u * (hi - lo)
+                a = lo + rng.random(n) * (hi - lo)
             aeps.append(a)
             weights.append(np.full(n, mass[j] / n))
             idx.append(np.full(n, j, dtype=int))

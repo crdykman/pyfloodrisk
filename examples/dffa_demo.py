@@ -35,8 +35,12 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, MCSConfig,
 from pyfloodrisk.demo_data import catchment_data
 
 STATION = "303203"
-DURATIONS_H = [6, 12, 24, 48, 72]
-AEPS = [0.1, 0.05, 0.02, 0.01, 0.005, 0.002]
+DURATIONS_H = [6, 9, 12, 24, 36, 48, 72, 96]
+#: AEPs of the flood *peak* -- the output side.  Not to be confused with the
+#: rainfall AEPs the stratification samples over (``aep_max``/``aep_min``);
+#: in this framework a 1% AEP peak is a mixture of rainfall AEPs, not the 1%
+#: AEP rainfall.
+PEAK_AEPS = [0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
 
 
 def main():
@@ -63,12 +67,11 @@ def main():
     # 3. the event model: the same GR4H, hot-started from a sampled state
     engine = GR4HEventEngine(params, area_km2=area, dt_hours=1.0)
 
-    # A modest experiment so the demo runs in a couple of minutes.  The ARR
-    # implementation uses 50 strata x 200 simulations for each duration.
-    # aep_max=0.9 rather than the ARR default 0.5: see the end-interval
-    # discussion in docs/dffa.md
-    strat = Stratification.uniform_in_z(aep_max=0.9, aep_min=1e-5,
-                                        n_strata=30, n_per_stratum=60)
+    # The full ARR implementation: 50 intervals x 200 simulations for each
+    # duration, over ARR's own 0.5 to 1e-6 AEP domain.  With eight durations
+    # that is 83,200 event runs, so this is no longer a two-minute demo.
+    strat = Stratification.uniform_in_z(aep_max=0.5, aep_min=1e-6,
+                                        n_strata=50, n_per_stratum=200)
     cfg = MCSConfig(area_km2=area, durations_h=DURATIONS_H, dt_hours=1.0,
                     tail_multiple=2.0, tail_min_hours=36.0,
                     store_hydrographs=24, seed=20260909)   # one per target AEP
@@ -118,9 +121,9 @@ def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
                     store_hydrographs=0, progress=False, seed=20260909)
     pet = pet_climatology(forcings)
 
-    methods = ["bootstrap", "smoothed", "empirical_copula", "independent_kde"]
+    methods = ["bootstrap", "empirical_copula", "independent_kde"]
     if not have_pyvinecopulib():
-        methods = ["bootstrap", "smoothed"]
+        methods = ["bootstrap"]
         print("\npyvinecopulib not installed - skipping the copula/KDE methods")
 
     runs, taus = {}, {}
@@ -134,7 +137,8 @@ def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
         sampled = states.sample(20000, np.random.default_rng(0))
         taus[method] = states.dependence(sampled)["tau_sampled"]
 
-    table = pd.DataFrame({m: r.envelope(AEPS)["q_peak"] for m, r in runs.items()})
+    table = pd.DataFrame({m: r.envelope(PEAK_AEPS)["q_peak"]
+                          for m, r in runs.items()})
     print(f"\nState-sampling comparison ({duration_h:g} h storms, "
           f"{strat.n_events} events each, {len(states.states)} donor states):")
     print(table.round(1).to_string())
@@ -143,7 +147,7 @@ def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
     print("\nKendall tau between state variables as sampled:")
     print(pd.DataFrame(taus).round(3).to_string())
 
-    ax = diagnostics.plot_curve_comparison(runs, AEPS, ratio_to="bootstrap")
+    ax = diagnostics.plot_curve_comparison(runs, PEAK_AEPS, ratio_to="bootstrap")
     ax.figure.savefig("figures/dffa_state_methods.png", bbox_inches="tight")
     print("\n  figures/dffa_state_methods.png")
     return runs

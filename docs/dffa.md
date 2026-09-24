@@ -212,7 +212,6 @@ would produce states GR4H could never reach.
 | `method` | what it does | use it for |
 |---|---|---|
 | `bootstrap` | draws whole rows | production runs — preserves every dependence exactly |
-| `smoothed` | donor + jitter, kernel covariance taken from the pool, donor shrunk by `1/√(1+h²)` so the covariance is preserved | short or heavily conditioned donor pools |
 | `empirical_copula` | nonparametric **vine copula** (`pyvinecopulib`, TLL pair copulas) on the pseudo-observations, with kernel or empirical margins | dependence estimated rather than assumed; asymmetric and tail dependence |
 | `independent_kde` | each state variable from its own boundary-corrected 1-D KDE (`pv.Kde1d`, which handles the bounded stores and the point mass at zero in `uh_total`), sampled independently | isolating how much the *joint* structure matters, as against the marginals alone |
 
@@ -220,15 +219,13 @@ would produce states GR4H could never reach.
 variables for the input and the sample — **run it before trusting any
 non-bootstrap method**, because it says whether the dependence you meant to
 preserve (or destroy) actually was. It earns its keep immediately on 117002A:
-`smoothed` roughly holds the tau between the two stores (0.455 against 0.491)
-but collapses the tau between the production store and `uh_total` (0.49
-against 0.84), because `uh_total` is zero for most hours and jittering a
-variable with a point mass at its boundary smears that mass out. `bootstrap`
-reproduces all three to within 0.003, which is one more reason it is the
-default. `empirical_copula` does markedly better than `smoothed` on the same
-pairs (0.478 / 0.787 / 0.501 against inputs of 0.491 / 0.837 / 0.522), which
-is what the vine buys you; `independent_kde` returns tau ≈ 0 on all three, as
-it is meant to.
+`bootstrap` reproduces all three pairs to within 0.003, which is one more
+reason it is the default. `empirical_copula` holds them closely (0.478 /
+0.787 / 0.501 against inputs of 0.491 / 0.837 / 0.522), which is what the vine
+buys you; `independent_kde` returns tau ≈ 0 on all three, as it is meant to.
+The pair to watch is the production store against `uh_total`: `uh_total` is
+zero for most hours, and a method that smears that point mass out will show it
+here as a collapsed tau.
 
 **Compare methods on tau, not on the design flood — at least not at demo
 sizes.** On the bundled experiment (25 strata × 40 simulations) the four
@@ -428,7 +425,7 @@ calls it, and turns each pool into a sampler.
 It costs donor-pool size — each pool holds only `ey` states per year of state
 table, 60 for six a year over ten years, against tens of thousands pooled — so
 the caveats under `dependence()` above apply with force, and it is worth
-running `bootstrap` against `smoothed` before trusting the tail.
+running `bootstrap` against `empirical_copula` before trusting the tail.
 
 On 303203 the per-duration pools are roughly twice as wet as a pooled
 distribution (median production store 12–16 mm against 7.9 mm) and lift the 1%

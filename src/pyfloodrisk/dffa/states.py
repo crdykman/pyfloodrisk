@@ -24,17 +24,6 @@ Methods
     Draw whole rows with replacement.  Preserves every dependence in the
     continuous run exactly, including the UH memory.  With a long enough
     continuous record this is the right choice.
-``"smoothed"``
-    Smoothed bootstrap: draw a row, then jitter the state variables in a
-    transformed (unbounded) space.  Fills the gaps between discrete states in a
-    short or heavily conditioned donor pool without inventing dependence
-    structure.  Two details make it behave: the jitter kernel takes its
-    covariance from the donor pool rather than being isotropic (an isotropic
-    kernel dilutes the cross-correlation between the stores), and the donor is
-    shrunk toward the pool mean by ``1/sqrt(1 + h**2)`` before jittering, which
-    cancels the variance inflation kernel smoothing would otherwise cause.  The
-    sampled covariance in the transformed space is then preserved exactly to
-    second order.
 ``"empirical_copula"``
     Nonparametric **vine copula** (``pyvinecopulib``, TLL local-likelihood pair
     copulas) fitted to the pseudo-observations, with kernel or empirical
@@ -76,7 +65,7 @@ __all__ = ["InitialStateSampler", "PETClimatology", "UH_TOTAL", "have_pyvinecopu
 #: Name of the derived state variable holding total UH memory (mm).
 UH_TOTAL = "uh_total"
 
-_METHODS = ("bootstrap", "smoothed", "empirical_copula", "independent_kde")
+_METHODS = ("bootstrap", "empirical_copula", "independent_kde")
 
 
 def have_pyvinecopulib() -> bool:
@@ -136,20 +125,18 @@ class InitialStateSampler:
         Optional datetime column, used for seasonal conditioning and for
         selecting climatological PET.
     method
-        One of ``bootstrap``, ``smoothed``, ``empirical_copula``,
-        ``independent_kde``.
+        One of ``bootstrap``, ``empirical_copula``, ``independent_kde``.
     bandwidth
-        Kernel bandwidth multiplier (``smoothed`` jitter, and the ``Kde1d``
-        multiplier for the KDE-based methods).  1.0 is the automatic choice.
+        Kernel bandwidth multiplier for the ``Kde1d`` margins used by the
+        KDE-based methods.  1.0 is the automatic choice.
     marginals
         ``"kde"`` (default) or ``"empirical"`` -- how ``empirical_copula``
         inverts each margin.  It has no effect on any other method:
-        ``bootstrap`` and ``smoothed`` draw whole donor rows, and
-        ``independent_kde`` is defined by its kernel densities, so all three
-        ignore it.  It is not a minor knob for the copula: on the demo
-        catchment, switching the copula to empirical margins moves the 0.2%
-        AEP quantile by about 12%, more than destroying the dependence
-        structure does.
+        ``bootstrap`` draws whole donor rows and ``independent_kde`` is
+        defined by its kernel densities, so both ignore it.  It is not a
+        minor knob for the copula: on the demo catchment, switching the copula
+        to empirical margins moves the 0.2% AEP quantile by about 12%, more
+        than destroying the dependence structure does.
     uh_profile
         How the UH memory shape is set for the non-bootstrap methods:
         ``"scaled_donor"`` (default) takes the nearest donor's profile and
@@ -325,16 +312,7 @@ class InitialStateSampler:
             return out
 
         d = len(self.state_vars)
-        if self.method == "smoothed":
-            Zp = self._Z[idx]
-            h = self.bandwidth * idx.size ** (-1.0 / (d + 4))
-            zbar = Zp.mean(axis=0)
-            S = np.atleast_2d(np.cov(Zp, rowvar=False))
-            L = np.linalg.cholesky(S + 1e-12 * np.eye(d))
-            jitter = h * (rng.normal(size=(n, d)) @ L.T)
-            shrunk = zbar + (self._Z[donors] - zbar) / np.sqrt(1.0 + h ** 2)
-            Xnew = self._inverse(shrunk + jitter)
-        elif self.method == "independent_kde":
+        if self.method == "independent_kde":
             fits = self._kde_marginals(idx)
             U = rng.random((n, d))          # independent across variables
             Xnew = np.column_stack([f.quantile(np.ascontiguousarray(U[:, j]))
