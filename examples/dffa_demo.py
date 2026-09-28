@@ -23,6 +23,8 @@ Run:  python examples/dffa_demo.py
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -30,11 +32,16 @@ from pyfloodrisk.dffa import (DEMO_PARAMETERS, GR4HEventEngine, MCSConfig,
                               Stratification, DerivedFFA,
                               continuous_state_table, diagnostics,
                               have_pyvinecopulib, load_station_forcings,
-                              pet_climatology, state_samplers_by_duration,
+                              pet_climatology, state_sampler_from_run,
+                              state_samplers_by_duration,
                               station_ifd, station_patterns)
 from pyfloodrisk.demo_data import catchment_data
 
+
 STATION = "303203"
+#: Where examples/ensemble_states.py writes its pools.  Absent -> the demo
+#: falls back to the bundled ten-year record.
+ENSEMBLE = Path("ensemble_states")
 DURATIONS_H = [6, 9, 12, 24, 36, 48, 72, 96]
 #: AEPs of the flood *peak* -- the output side.  Not to be confused with the
 #: rainfall AEPs the stratification samples over (``aep_max``/``aep_min``);
@@ -43,21 +50,58 @@ DURATIONS_H = [6, 9, 12, 24, 36, 48, 72, 96]
 PEAK_AEPS = [0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
 
 
+def state_pools(params, area, forcings, method="bootstrap", durations=None,
+                **kwargs):
+    """One donor pool per duration, from the ensemble if it has been built.
+
+    The pools are the states the catchment was actually in immediately
+    before its own large bursts of each length, so a 72 h storm starts from
+    the wetness that precedes 72 h storms.  Where they come from is the only
+    choice here:
+
+    ``ENSEMBLE`` present
+        the 100 disaggregated realisations of 30 years that
+        ``examples/ensemble_states.py`` writes -- 17,400 donors a duration.
+    otherwise
+        the bundled ten-year record, 60 donors a duration.  The table has to
+        be unthinned, since pools are matched to burst onsets by timestamp.
+
+    The ensemble is not shipped with the package, so the figures in the
+    repository were built from it and a plain checkout reproduces them in
+    shape but not in value.
+
+    Returns ``(samplers, description)``.
+    """
+    durations = list(DURATIONS_H if durations is None else durations)
+    if ENSEMBLE.is_dir():
+        pools = {}
+        for d in durations:
+            path = ENSEMBLE / f"states_{d:g}h.csv.gz"
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"{path} is missing; rerun examples/ensemble_states.py "
+                    f"for durations {DURATIONS_H}")
+            pools[float(d)] = pd.read_csv(path, parse_dates=["date"])
+        states = {d: state_sampler_from_run(p, params, method=method, **kwargs)
+                  for d, p in pools.items()}
+        n = min(len(p) for p in pools.values())
+        src = f"ensemble in {ENSEMBLE}, {n} donors per duration"
+    else:
+        table = continuous_state_table(forcings, params, area,
+                                       warmup_hours=8760)
+        states = state_samplers_by_duration(table, forcings, params, durations,
+                                            ey=6, method=method, **kwargs)
+        n = min(len(s.states) for s in states.values())
+        src = f"bundled record, {n} donors per duration"
+    return states, src
+
 def main():
     area = catchment_data(STATION)
     params = DEMO_PARAMETERS[STATION]          # calibrate() for real work
     forcings = load_station_forcings(STATION)
 
-    # 1. the state distribution: a continuous GR4H run over the record, split
-    #    into one donor pool per duration.  Each pool holds the states the
-    #    catchment was actually in immediately before its own large bursts of
-    #    that length, so a 72 h storm starts from the wetness that precedes
-    #    72 h storms.  The table must be unthinned: the pools are matched to
-    #    burst onsets by timestamp.
-    state_table = continuous_state_table(forcings, params, area,
-                                         warmup_hours=8760)
-    states = state_samplers_by_duration(state_table, forcings, params,
-                                        DURATIONS_H, ey=6, method="bootstrap")
+    # 1. the state distribution, one pool per storm duration
+    states, state_source = state_pools(params, area, forcings)
 
     # 2. rainfall: areal patterns (nearest standard area) from 12 h up,
     #    point patterns below that, and the station's BoM IFD download
@@ -76,9 +120,7 @@ def main():
                     tail_multiple=2.0, tail_min_hours=36.0,
                     store_hydrographs=24, seed=20260909)   # one per target AEP
 
-    pool = min(len(s.states) for s in states.values())
-    print(f"{STATION}: {area:.0f} km2, {pool} donor states per duration "
-          f"(from {len(state_table)} hours of continuous run), "
+    print(f"{STATION}: {area:.0f} km2, states from the {state_source}, "
           f"{len(DURATIONS_H)} durations x {strat.n_events} events "
           f"= {len(DURATIONS_H) * strat.n_events} GR4H event runs")
     res = DerivedFFA(ifd, patterns, states, engine, cfg, strat,
@@ -93,11 +135,11 @@ def main():
                                  states=states[float(DURATIONS_H[0])])
     print("\nFigures written:", *files, sep="\n  ")
 
-    compare_state_methods(ifd, patterns, state_table, params, engine, forcings)
+    compare_state_methods(ifd, patterns, params, area, engine, forcings)
     return res
 
 
-def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
+def compare_state_methods(ifd, patterns, params, area, engine, forcings,
                           duration_h=12.0):
     """How much of the design estimate comes from the *joint* state structure?
 
@@ -128,8 +170,8 @@ def compare_state_methods(ifd, patterns, state_table, params, engine, forcings,
 
     runs, taus = {}, {}
     for method in methods:
-        by_dur = state_samplers_by_duration(
-            state_table, forcings, params, [duration_h], ey=6, method=method,
+        by_dur, _ = state_pools(
+            params, area, forcings, method=method, durations=[duration_h],
             uh_profile="mean" if method == "independent_kde" else "scaled_donor")
         states = by_dur[float(duration_h)]
         runs[method] = DerivedFFA(ifd, patterns, by_dur, engine, cfg, strat,

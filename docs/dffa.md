@@ -417,7 +417,7 @@ are matched to burst onsets by timestamp. For each duration the largest
 timestep before each is kept. A 72 h storm therefore starts from the wetness
 that precedes 72 h storms, taken from the record rather than modelled.
 
-The selection itself is `pyfloodrisk.hydroevents.extract_initial_states_per_duration`,
+The selection itself is `pyfloodrisk.states.extract_initial_states_per_duration`,
 which returns `duration_h -> DataFrame` of donor rows and is usable on its own;
 `state_samplers_by_duration` trims the record to the span the state table covers,
 calls it, and turns each pool into a sampler.

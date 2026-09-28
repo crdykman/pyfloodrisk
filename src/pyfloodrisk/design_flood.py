@@ -11,7 +11,7 @@ import pandas as pd
 from .calibration_robust import behavioural_posterior, calibration, robust_calibration
 from .demo_data import catchment_data, demo_paths, load_station_forcings
 from .gr4h.GR4H_model import GR4H
-from .hydroevents import extract_initial_states_per_duration
+from .states import extract_initial_states_per_duration
 from .design_storm import build_design_storm
 from .gr4h.state_table import continuous_state_table, state_from_row, uh_columns
 

@@ -18,3 +18,4 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 ARR_190514_V4.2.pdf
+ensemble_states/

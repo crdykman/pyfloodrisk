@@ -102,7 +102,7 @@ def state_samplers_by_duration(
     was *actually* in immediately before its own large bursts: the largest
     ``ey * nyears`` bursts of that length are found and the state table row
     one timestep before each is kept.  This is a thin wrapper over
-    :func:`~pyfloodrisk.hydroevents.extract_initial_states_per_duration`,
+    :func:`~pyfloodrisk.states.extract_initial_states_per_duration`,
     which does the selection, and turns each pool into a sampler.
 
     Parameters
@@ -145,7 +145,7 @@ def state_samplers_by_duration(
     the part of the design flood that depends on the stores being wet
     together.
     """
-    from ..hydroevents import extract_initial_states_per_duration
+    from ..states import extract_initial_states_per_duration
 
     if "date" not in state_table:
         raise ValueError("state_table needs its 'date' column to match bursts")

@@ -488,7 +488,7 @@ def test_shared_selection_function_drives_the_dffa_path(forcings, unthinned):
     Calling the main-package function directly over the same window must give
     the same donor rows the workflow helper builds its samplers from.
     """
-    from pyfloodrisk.hydroevents import extract_initial_states_per_duration
+    from pyfloodrisk.states import extract_initial_states_per_duration
 
     dates = pd.DatetimeIndex(unthinned["date"])
     window = forcings.loc[dates.min():dates.max()]
@@ -503,7 +503,7 @@ def test_shared_selection_function_drives_the_dffa_path(forcings, unthinned):
 
 
 def test_per_duration_selection_needs_an_unthinned_dated_table(forcings, unthinned):
-    from pyfloodrisk.hydroevents import extract_initial_states_per_duration
+    from pyfloodrisk.states import extract_initial_states_per_duration
 
     dates = pd.DatetimeIndex(unthinned["date"])
     window = forcings.loc[dates.min():dates.max()]

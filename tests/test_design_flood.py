@@ -14,7 +14,7 @@ from pyfloodrisk.design_storm import build_design_storm
 from pyfloodrisk.dffa import DEMO_PARAMETERS
 from pyfloodrisk.dffa.workflow import continuous_state_table, load_station_forcings
 from pyfloodrisk.demo_data import catchment_data
-from pyfloodrisk.hydroevents import extract_initial_states_per_duration
+from pyfloodrisk.states import extract_initial_states_per_duration
 
 STATION = "117002A"
 DURATION_H = 12

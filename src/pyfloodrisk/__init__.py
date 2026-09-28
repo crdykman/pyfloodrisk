@@ -22,10 +22,10 @@ from .dffa import (
     continuous_state_table,
     run_dffa,
 )
-from .hydroevents import (extract_initial_states, hydro_event_pipeline,
-                         initial_state_indices)
+from .events import hydro_event_pipeline
+from .states import extract_initial_states, initial_state_indices
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __all__ = [
     "DFFAResults",
     "DerivedFFA",
